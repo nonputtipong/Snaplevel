@@ -33,3 +33,29 @@ Working notes on the Meta Model API as used by Snaplevel. No keys or account ide
 
 - Per-request caps and rate limits for SAM and Spark.
 - Whether the Meta console offers a spend limit.
+
+## Mock SSE event format
+
+`POST /api/build-level` with `MOCK_MODE=1` streams `text/event-stream`:
+
+- `event: progress`, data `{ step, status, current?, total? }`: one
+  `find_objects`, then `segment` once per object with `current`/`total`, then
+  `design_level`. Events are ~400ms apart so progress UI feels realistic.
+- `event: complete`, data: the Level JSON.
+
+Example:
+
+```text
+event: progress
+data: {"step":"find_objects","status":"done"}
+
+event: progress
+data: {"step":"segment","status":"done","current":1,"total":5}
+
+event: complete
+data: {"width":1024,"height":768,...}
+```
+
+`?fixture=0|1|2` selects the served fixture (default 0); anything else returns
+a 400 JSON error. Without `MOCK_MODE=1` the route returns 501 until the live
+pipeline lands.
