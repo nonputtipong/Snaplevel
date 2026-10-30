@@ -3,10 +3,11 @@ import { validateLevel } from "@/lib/level";
 import level1 from "../../../../fixtures/level-1.json";
 import level2 from "../../../../fixtures/level-2.json";
 import level3 from "../../../../fixtures/level-3.json";
+import levelEmpty from "../../../../fixtures/level-empty.json";
 
 export const dynamic = "force-dynamic";
 
-const FIXTURES = [level1, level2, level3];
+const FIXTURES = [level1, level2, level3, levelEmpty];
 const DELAY_MS = 400;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -21,8 +22,9 @@ export async function POST(req: NextRequest) {
 
   const index = Number(req.nextUrl.searchParams.get("fixture") ?? "0");
   if (!Number.isInteger(index) || index < 0 || index >= FIXTURES.length) {
+    const valid = FIXTURES.map((_, i) => i).join(", ");
     return Response.json(
-      { error: "Unknown fixture. Use ?fixture=0, 1 or 2." },
+      { error: `Unknown fixture. Use ?fixture=${valid}.` },
       { status: 400 },
     );
   }

@@ -56,6 +56,6 @@ event: complete
 data: {"width":1024,"height":768,...}
 ```
 
-`?fixture=0|1|2` selects the served fixture (default 0); anything else returns
-a 400 JSON error. Without `MOCK_MODE=1` the route returns 501 until the live
-pipeline lands.
+`?fixture=0|1|2|3` selects the served fixture (default 0; 3 is the empty
+level); anything else returns a 400 JSON error. Without `MOCK_MODE=1` the
+route returns 501 until the live pipeline lands.
