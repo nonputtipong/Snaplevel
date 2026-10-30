@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { MaskMatch, SegmentPhraseResult } from "@/lib/pipeline/segment";
+import { toPolygons } from "@/lib/pipeline/toPolygons";
+import type { Point } from "@/lib/level";
 import { resizeImage } from "@/lib/image";
 
 const COLORS = [
@@ -25,11 +27,15 @@ function MatchShape({
   match,
   color,
   showOrigin,
+  showPolygons,
+  parts,
   label,
 }: {
   match: MaskMatch;
   color: string;
   showOrigin: boolean;
+  showPolygons: boolean;
+  parts: Point[][];
   label: string;
 }) {
   const [x1, y1, x2, y2] = match.box;
@@ -48,6 +54,16 @@ function MatchShape({
       <g transform={`translate(${x1} ${y1})`}>
         <path d={match.svgPath} fill={color} fillOpacity={0.45} stroke={color} strokeWidth={2} />
       </g>
+      {showPolygons &&
+        parts.map((part, i) => (
+          <polygon
+            key={i}
+            points={part.map(([x, y]) => `${x},${y}`).join(" ")}
+            fill="none"
+            stroke={color}
+            strokeWidth={4}
+          />
+        ))}
       <rect
         x={x1}
         y={y1}
@@ -72,7 +88,18 @@ export function MasksClient({ photos, photo, imageDataUrl }: Props) {
   const [results, setResults] = useState<SegmentPhraseResult[] | null>(null);
   const [totalMs, setTotalMs] = useState(0);
   const [showOrigin, setShowOrigin] = useState(true);
+  const [showPolygons, setShowPolygons] = useState(true);
   const [sized, setSized] = useState<{ url: string; width: number; height: number } | null>(null);
+
+  const polygons = useMemo(
+    () =>
+      (results ?? []).map((result) =>
+        result.kept
+          ? toPolygons({ svgPath: result.kept.svgPath, box: result.kept.box })
+          : [],
+      ),
+    [results],
+  );
 
   // Downscale to the same max-1024 JPEG the upload flow sends, so the overlay
   // verifies the exact pixels SAM sees.
@@ -175,6 +202,8 @@ export function MasksClient({ photos, photo, imageDataUrl }: Props) {
                       match={result.kept}
                       color={COLORS[index % COLORS.length]}
                       showOrigin={showOrigin}
+                      showPolygons={showPolygons}
+                      parts={polygons[index]}
                       label={`${index + 1}. ${result.phrase}`}
                     />
                   ) : null,
@@ -206,6 +235,14 @@ export function MasksClient({ photos, photo, imageDataUrl }: Props) {
           />
           Show origin-placed outlines (dashed white) to test the offset
         </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={showPolygons}
+            onChange={(event) => setShowPolygons(event.target.checked)}
+          />
+          Show simplified polygons (≤ 40 vertices per part)
+        </label>
         <button
           onClick={run}
           disabled={running || phrases.trim().length === 0}
@@ -227,7 +264,7 @@ export function MasksClient({ photos, photo, imageDataUrl }: Props) {
                 />
                 {result.phrase}: {result.latencyMs} ms, {result.matches.length} match(es)
                 {result.kept
-                  ? `, kept area ${result.kept.area} px`
+                  ? `, kept area ${result.kept.area} px, ${polygons[index].length} part(s) (${polygons[index].map((part) => part.length).join("+")} verts)`
                   : result.matches.length > 0
                     ? ", all dropped under 1%"
                     : ", zero matches (skipped)"}
