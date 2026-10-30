@@ -10,6 +10,7 @@ Working notes on the Meta Model API as used by Snaplevel. No keys or account ide
 - SAM: `POST /v1/responses`, one short noun phrase per request, base64 data URLs accepted, `stream: true`. Zero matches is valid (empty output). Boxes in source pixels; masks parsed with `@meta-sam/parser`.
 - Muse Image: `POST /v1/images/generations` and `/v1/images/edits`; edits take base64 data URLs; output background always opaque; `mask` unsupported on edits.
 - Voice: file transcription via `POST /v1/asr/transcribe`.
+- Smoke test (Oct 30): `responses.create({ model: "muse-spark-1.3", input })` via the OpenAI SDK succeeded; billing accepted, no auth errors.
 
 ## Unverified
 
@@ -19,7 +20,7 @@ Working notes on the Meta Model API as used by Snaplevel. No keys or account ide
 
 ## Latency
 
-- (No measurements yet.)
+- Text smoke call (5-word reply): ~27 s wall time (Oct 30; first request, may include cold start).
 
 ## Rate limits
 
