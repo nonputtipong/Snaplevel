@@ -176,7 +176,7 @@ export async function segmentPhrase(
 async function mapLimit<T, R>(
   items: readonly T[],
   limit: number,
-  fn: (item: T) => Promise<R>,
+  fn: (item: T, index: number) => Promise<R>,
 ): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let next = 0;
@@ -185,7 +185,7 @@ async function mapLimit<T, R>(
     async () => {
       while (next < items.length) {
         const index = next++;
-        results[index] = await fn(items[index]);
+        results[index] = await fn(items[index], index);
       }
     },
   );
@@ -198,8 +198,11 @@ export async function segmentObjects(
   phrases: string[],
   imageSize: { width: number; height: number },
   concurrency = SAM_CONCURRENCY,
+  onPhraseDone?: (index: number, result: SegmentPhraseResult) => void,
 ): Promise<SegmentPhraseResult[]> {
-  return mapLimit(phrases, concurrency, (phrase) =>
-    segmentPhrase(imageDataUrl, phrase, imageSize),
-  );
+  return mapLimit(phrases, concurrency, async (phrase, index) => {
+    const result = await segmentPhrase(imageDataUrl, phrase, imageSize);
+    onPhraseDone?.(index, result);
+    return result;
+  });
 }
