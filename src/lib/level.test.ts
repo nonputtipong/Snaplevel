@@ -3,6 +3,7 @@ import { validateLevel } from "./level";
 import level1 from "../../fixtures/level-1.json";
 import level2 from "../../fixtures/level-2.json";
 import level3 from "../../fixtures/level-3.json";
+import levelEmpty from "../../fixtures/level-empty.json";
 
 describe("validateLevel", () => {
   test("accepts fixture 1", () => {
@@ -19,6 +20,14 @@ describe("validateLevel", () => {
     if (result.ok) {
       expect(result.level.width).toBe(768);
       expect(result.level.height).toBe(1024);
+    }
+  });
+
+  test("accepts the empty fixture", () => {
+    const result = validateLevel(levelEmpty);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.level.objects).toEqual([]);
     }
   });
 
