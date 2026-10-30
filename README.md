@@ -30,6 +30,11 @@ All calls are server-side; the key never reaches the browser.
 - Muse Image (`muse-image-1.0`) — optional restyle of the level background.
 - Muse Voice Transcribe (`muse-voice-transcribe-1.0`) — optional spoken rules (planned).
 
+The SAM request/streaming code in `src/lib/pipeline/segment.ts` adapts the
+`07_sam/01_api_basics/typescript/sam-api.ts` sample from the
+[Meta model cookbook](https://github.com/meta-models/meta-model-cookbook)
+(MIT License, © Meta Platforms, Inc.); see the header comment in that file.
+
 See `docs/api-notes.md` for verified API behavior and measurements.
 
 ## Built during the hackathon
