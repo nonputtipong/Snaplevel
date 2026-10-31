@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 import { NextRequest } from "next/server";
 import { MAX_UPLOAD_BYTES } from "@/lib/image";
-import { POST } from "./route";
+import { MetaError } from "@/lib/meta";
+import { resetRateLimiters } from "@/lib/rateLimit";
+import { POST, reportLiveError } from "./route";
 
 const PNG_3X2 = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -140,4 +142,104 @@ test("mock mode streams the documented progress sequence", async () => {
       delete env.MOCK_MODE;
     }
   }
+});
+
+async function postTinyPng(): Promise<Response> {
+  return postPhoto(new File([PNG_3X2], "tiny.png", { type: "image/png" }));
+}
+
+/** Live branch without a key; limiters reset so tests are order-free. */
+async function withoutKey(
+  env: Record<string, string | undefined>,
+  fn: () => Promise<void>,
+): Promise<void> {
+  const savedMock = env.MOCK_MODE;
+  const savedKey = env.MODEL_API_KEY;
+  const savedIp = env.RATE_LIMIT_MAX;
+  const savedGlobal = env.RATE_LIMIT_GLOBAL_MAX;
+  delete env.MOCK_MODE;
+  delete env.MODEL_API_KEY;
+  resetRateLimiters();
+  try {
+    await fn();
+  } finally {
+    if (savedMock !== undefined) {
+      env.MOCK_MODE = savedMock;
+    }
+    if (savedKey !== undefined) {
+      env.MODEL_API_KEY = savedKey;
+    }
+    if (savedIp !== undefined) {
+      env.RATE_LIMIT_MAX = savedIp;
+    } else {
+      delete env.RATE_LIMIT_MAX;
+    }
+    if (savedGlobal !== undefined) {
+      env.RATE_LIMIT_GLOBAL_MAX = savedGlobal;
+    } else {
+      delete env.RATE_LIMIT_GLOBAL_MAX;
+    }
+    resetRateLimiters();
+  }
+}
+
+test("live mode rate-limits per IP with a friendly 429", async () => {
+  const env = process.env as Record<string, string | undefined>;
+  await withoutKey(env, async () => {
+    env.RATE_LIMIT_MAX = "1";
+    expect((await postTinyPng()).status).toBe(500);
+    const limited = await postTinyPng();
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("Retry-After")).toBe("3600");
+    expect(((await limited.json()) as { error: string }).error).toBe(
+      "Too many builds from your address. Please wait a while and try again.",
+    );
+  });
+});
+
+test("live mode rate-limits globally with the same 429", async () => {
+  const env = process.env as Record<string, string | undefined>;
+  await withoutKey(env, async () => {
+    env.RATE_LIMIT_MAX = "100";
+    env.RATE_LIMIT_GLOBAL_MAX = "1";
+    expect((await postTinyPng()).status).toBe(500);
+    const limited = await postTinyPng();
+    expect(limited.status).toBe(429);
+    expect(((await limited.json()) as { error: string }).error).toBe(
+      "Too many builds from your address. Please wait a while and try again.",
+    );
+  });
+});
+
+test("error responses and logs never echo upstream text", () => {
+  const frames: Array<{ event: string; data: unknown }> = [];
+  const logged: unknown[][] = [];
+  const originalError = console.error;
+  console.error = (...args: unknown[]) => {
+    logged.push(args);
+  };
+  try {
+    reportLiveError(
+      (event, data) => {
+        frames.push({ event, data });
+      },
+      new MetaError("sk-fake-999\nError: x\n    at evil (x.js:1:1)", {
+        status: 503,
+      }),
+    );
+  } finally {
+    console.error = originalError;
+  }
+  expect(frames).toEqual([
+    {
+      event: "error",
+      data: {
+        message: "The model is temporarily unavailable. Please try again.",
+      },
+    },
+  ]);
+  const dumped = JSON.stringify(frames) + JSON.stringify(logged);
+  expect(dumped).not.toContain("sk-fake-999");
+  expect(dumped).not.toContain("at evil");
+  expect(JSON.stringify(logged)).toContain("MetaError status 503");
 });

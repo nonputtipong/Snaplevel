@@ -13,7 +13,7 @@ import {
   type SegmentationMaskRecord,
 } from "@meta-sam/parser";
 import type { Role } from "../level";
-import { getMetaClient } from "../meta";
+import { MetaError, getMetaClient, withMetaRetry } from "../meta";
 
 export const SAM_MODEL = "sam-3.1";
 export const SAM_CONCURRENCY = 4;
@@ -149,20 +149,30 @@ export async function segmentPhrase(
   }
   const started = Date.now();
   const client = getMetaClient();
-  const stream = await client.responses.create({
-    model: SAM_MODEL,
-    stream: true,
-    input: [
-      {
-        type: "message",
-        role: "user",
-        content: [
-          { type: "input_text", text: concept },
-          { type: "input_image", image_url: imageDataUrl, detail: "auto" },
+  let stream: unknown;
+  try {
+    stream = await withMetaRetry(() =>
+      client.responses.create({
+        model: SAM_MODEL,
+        stream: true,
+        input: [
+          {
+            type: "message",
+            role: "user",
+            content: [
+              { type: "input_text", text: concept },
+              { type: "input_image", image_url: imageDataUrl, detail: "auto" },
+            ],
+          },
         ],
-      },
-    ],
-  });
+      }),
+    );
+  } catch (error) {
+    throw new MetaError(
+      `Segmentation request failed after ${Date.now() - started} ms`,
+      error,
+    );
+  }
   const result = await parseImageStream(
     normalizedEvents(stream as AsyncIterable<unknown>),
   ).finalResult;
