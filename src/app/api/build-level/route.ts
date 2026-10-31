@@ -4,7 +4,11 @@ import { MAX_UPLOAD_BYTES } from "@/lib/image";
 import { inspectImageBytes } from "@/lib/imageHeader";
 import { getMetaClient } from "@/lib/meta";
 import { listObjects, MAX_OBJECTS } from "@/lib/pipeline/listObjects";
-import { segmentObjects, SAM_CONCURRENCY } from "@/lib/pipeline/segment";
+import {
+  MAX_SAM_CALLS,
+  SAM_CONCURRENCY,
+  segmentObjectsWithRetry,
+} from "@/lib/pipeline/segment";
 import { toPolygons } from "@/lib/pipeline/toPolygons";
 import { assembleLevel } from "@/lib/pipeline/assemble";
 import level1 from "../../../../fixtures/level-1.json";
@@ -80,22 +84,28 @@ async function liveBuildLevel(req: NextRequest): Promise<Response> {
         send("progress", { step: "find_objects", status: "done" });
 
         const objects = listed.list.objects.slice(0, MAX_OBJECTS);
-        const phrases = objects.map((o) => o.phrase);
         const samStarted = Date.now();
         let done = 0;
-        const results = await segmentObjects(
+        const { results, notes: retryNotes } = await segmentObjectsWithRetry(
           dataUrl,
-          phrases,
+          objects.map((o) => ({
+            phrase: o.phrase,
+            fallback: o.fallback,
+            role: o.role,
+          })),
           { width: info.width, height: info.height },
-          SAM_CONCURRENCY,
-          () => {
-            done += 1;
-            send("progress", {
-              step: "segment",
-              status: "done",
-              current: done,
-              total: phrases.length,
-            });
+          {
+            maxCalls: MAX_SAM_CALLS,
+            concurrency: SAM_CONCURRENCY,
+            onPhraseDone: () => {
+              done += 1;
+              send("progress", {
+                step: "segment",
+                status: "done",
+                current: done,
+                total: objects.length,
+              });
+            },
           },
         );
         const samMs = Date.now() - samStarted;
@@ -139,7 +149,11 @@ async function liveBuildLevel(req: NextRequest): Promise<Response> {
           });
           return;
         }
-        send("progress", { step: "design_level", status: "done", notes });
+        send("progress", {
+          step: "design_level",
+          status: "done",
+          notes: [...retryNotes, ...notes],
+        });
         send("complete", level);
       } catch {
         send("error", {

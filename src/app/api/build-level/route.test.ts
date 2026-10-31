@@ -90,3 +90,54 @@ test("live mode reports a missing model key", async () => {
     expect(body.error).not.toContain("sk-");
   });
 });
+
+test("mock mode streams the documented progress sequence", async () => {
+  const env = process.env as Record<string, string | undefined>;
+  const saved = env.MOCK_MODE;
+  env.MOCK_MODE = "1";
+  try {
+    const form = new FormData();
+    form.append("photo", new File([PNG_3X2], "tiny.png", { type: "image/png" }));
+    const res = await POST(
+      new NextRequest("http://localhost/api/build-level?fixture=0", {
+        method: "POST",
+        body: form,
+      }),
+    );
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    const frames = text
+      .split("\n\n")
+      .filter((block) => block.includes("data: "))
+      .map((block) => {
+        const event = block.split("\n")[0].replace("event: ", "");
+        const data = JSON.parse(
+          block.split("\n")[1].replace("data: ", ""),
+        ) as Record<string, unknown>;
+        return { event, data };
+      });
+    expect(frames[0]).toEqual({
+      event: "progress",
+      data: { step: "find_objects", status: "done" },
+    });
+    const segments = frames.filter(
+      (f) => f.event === "progress" && f.data.step === "segment",
+    );
+    expect(segments.length).toBeGreaterThan(0);
+    expect(segments[segments.length - 1].data).toMatchObject({
+      status: "done",
+      total: segments.length,
+    });
+    expect(frames[frames.length - 2]).toEqual({
+      event: "progress",
+      data: { step: "design_level", status: "done" },
+    });
+    expect(frames[frames.length - 1].event).toBe("complete");
+  } finally {
+    if (saved !== undefined) {
+      env.MOCK_MODE = saved;
+    } else {
+      delete env.MOCK_MODE;
+    }
+  }
+});

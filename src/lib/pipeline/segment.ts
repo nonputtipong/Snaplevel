@@ -12,10 +12,13 @@ import {
   type ResponsesEvent,
   type SegmentationMaskRecord,
 } from "@meta-sam/parser";
+import type { Role } from "../level";
 import { getMetaClient } from "../meta";
 
 export const SAM_MODEL = "sam-3.1";
 export const SAM_CONCURRENCY = 4;
+/** Hard ceiling on SAM calls per photo, primaries plus retries. */
+export const MAX_SAM_CALLS = 12;
 const MIN_AREA_FRACTION = 0.01;
 
 export interface MaskMatch {
@@ -205,4 +208,77 @@ export async function segmentObjects(
     onPhraseDone?.(index, result);
     return result;
   });
+}
+
+export interface SegmentItem {
+  phrase: string;
+  fallback: string | null;
+  role: Role;
+}
+
+/** Retry priority when the cap covers fewer than all zero-matches. */
+const RETRY_ROLE_ORDER: Role[] = [
+  "platform",
+  "bouncy",
+  "slippery",
+  "hazard",
+  "decor",
+];
+
+export interface SegmentWithRetryResult {
+  results: SegmentPhraseResult[];
+  notes: string[];
+}
+
+export async function segmentObjectsWithRetry(
+  imageDataUrl: string,
+  items: readonly SegmentItem[],
+  imageSize: { width: number; height: number },
+  options?: {
+    maxCalls?: number;
+    concurrency?: number;
+    onPhraseDone?: (index: number, result: SegmentPhraseResult) => void;
+    segmentFn?: typeof segmentPhrase;
+  },
+): Promise<SegmentWithRetryResult> {
+  const maxCalls = options?.maxCalls ?? MAX_SAM_CALLS;
+  const concurrency = options?.concurrency ?? SAM_CONCURRENCY;
+  const onPhraseDone = options?.onPhraseDone;
+  const segmentFn = options?.segmentFn ?? segmentPhrase;
+  const results = await mapLimit(items, concurrency, async (item, index) => {
+    const result = await segmentFn(imageDataUrl, item.phrase, imageSize);
+    onPhraseDone?.(index, result);
+    return result;
+  });
+  const candidates = results
+    .map((result, index) => ({ result, index }))
+    .filter(
+      ({ result, index }) =>
+        result.matches.length === 0 && items[index].fallback !== null,
+    )
+    .sort(
+      (a, b) =>
+        RETRY_ROLE_ORDER.indexOf(items[a.index].role) -
+        RETRY_ROLE_ORDER.indexOf(items[b.index].role),
+    );
+  const notes: string[] = [];
+  const budget = Math.max(0, maxCalls - results.length);
+  const chosen = candidates.slice(0, budget);
+  const retried = await mapLimit(chosen, concurrency, async ({ index }) => {
+    const fallback = items[index].fallback as string;
+    const retry = await segmentFn(imageDataUrl, fallback, imageSize);
+    return { index, fallback, retry };
+  });
+  for (const { index, fallback, retry } of retried) {
+    results[index] = { ...retry, phrase: items[index].phrase };
+    notes.push(
+      retry.matches.length === 0
+        ? `Retried '${items[index].phrase}' as '${fallback}': no matches`
+        : `Retried '${items[index].phrase}' as '${fallback}': ${retry.matches.length} matches`,
+    );
+  }
+  if (candidates.length > chosen.length) {
+    notes.push(`Some retries skipped: ${maxCalls}-call cap reached.`);
+  }
+  return { results, notes };
 }

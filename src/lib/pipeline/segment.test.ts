@@ -1,7 +1,14 @@
 import { expect, test } from "bun:test";
 import type { SegmentationMaskRecord } from "@meta-sam/parser";
 import recordJson from "../../../fixtures/sam-mask-record.json";
-import { buildMatches, selectKeptMatch, type MaskMatch } from "./segment";
+import {
+  buildMatches,
+  selectKeptMatch,
+  segmentObjectsWithRetry,
+  type MaskMatch,
+  type SegmentItem,
+  type SegmentPhraseResult,
+} from "./segment";
 
 const realMask = recordJson as unknown as SegmentationMaskRecord;
 // Real captured record: synthetic 512x512 white rectangle on dark background,
@@ -52,4 +59,88 @@ test("selectKeptMatch keeps a mask at exactly 1%", () => {
 test("zero matches is a valid skip", () => {
   expect(buildMatches([])).toEqual([]);
   expect(selectKeptMatch([], 512 * 512)).toBeUndefined();
+});
+
+const SIZE = { width: 100, height: 100 };
+
+function stub(
+  script: Record<string, MaskMatch[]>,
+  calls: string[],
+): (
+  imageDataUrl: string,
+  phrase: string,
+  imageSize: { width: number; height: number },
+) => Promise<SegmentPhraseResult> {
+  return async (_url, phrase) => {
+    calls.push(phrase);
+    const matches = script[phrase] ?? [];
+    return { phrase, matches, kept: matches[0], latencyMs: 1 };
+  };
+}
+
+test("retries zero-match phrases once and notes each retry", async () => {
+  const calls: string[] = [];
+  const items: SegmentItem[] = [
+    { phrase: "tool chest", fallback: "toolbox", role: "platform" },
+    { phrase: "cup", fallback: "mug", role: "bouncy" },
+  ];
+  const { results, notes } = await segmentObjectsWithRetry("img", items, SIZE, {
+    maxCalls: 12,
+    segmentFn: stub(
+      { toolbox: [match(5000), match(3000)], "tool chest": [], cup: [] },
+      calls,
+    ),
+  });
+  expect(calls).toEqual(["tool chest", "cup", "toolbox", "mug"]);
+  expect(results[0].matches).toHaveLength(2);
+  expect(results[0].phrase).toBe("tool chest");
+  expect(results[1].matches).toHaveLength(0);
+  expect(notes).toEqual([
+    "Retried 'tool chest' as 'toolbox': 2 matches",
+    "Retried 'cup' as 'mug': no matches",
+  ]);
+});
+
+test("never retries matches dropped under 1% or a null fallback", async () => {
+  const calls: string[] = [];
+  const items: SegmentItem[] = [
+    { phrase: "vase", fallback: "pot", role: "platform" },
+    { phrase: "speck", fallback: null, role: "decor" },
+  ];
+  const { results, notes } = await segmentObjectsWithRetry("img", items, SIZE, {
+    maxCalls: 12,
+    segmentFn: stub({ vase: [match(99)] }, calls),
+  });
+  expect(calls).toEqual(["vase", "speck"]);
+  expect(results[0].matches).toHaveLength(1);
+  expect(notes).toEqual([]);
+});
+
+test("cap respected with platform-first decor-last stable priority", async () => {
+  const calls: string[] = [];
+  const items: SegmentItem[] = [
+    { phrase: "curtain", fallback: "drape", role: "decor" },
+    { phrase: "stove", fallback: "range", role: "hazard" },
+    { phrase: "table", fallback: "desk", role: "platform" },
+    { phrase: "sofa", fallback: "couch", role: "platform" },
+    { phrase: "ball", fallback: "sphere", role: "bouncy" },
+  ];
+  const { notes } = await segmentObjectsWithRetry("img", items, SIZE, {
+    maxCalls: 7,
+    segmentFn: stub({}, calls),
+  });
+  expect(calls).toEqual([
+    "curtain",
+    "stove",
+    "table",
+    "sofa",
+    "ball",
+    "desk",
+    "couch",
+  ]);
+  expect(notes).toEqual([
+    "Retried 'table' as 'desk': no matches",
+    "Retried 'sofa' as 'couch': no matches",
+    "Some retries skipped: 7-call cap reached.",
+  ]);
 });
