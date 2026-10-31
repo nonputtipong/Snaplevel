@@ -2,7 +2,15 @@ import { NextRequest } from "next/server";
 import { validateLevel } from "@/lib/level";
 import { MAX_UPLOAD_BYTES } from "@/lib/image";
 import { inspectImageBytes } from "@/lib/imageHeader";
-import { getMetaClient } from "@/lib/meta";
+import { describeError, getMetaClient, messageFor } from "@/lib/meta";
+import {
+  GLOBAL_MAX_BUILDS,
+  IP_MAX_BUILDS,
+  clientIp,
+  envMax,
+  globalLimiter,
+  ipLimiter,
+} from "@/lib/rateLimit";
 import { listObjects, MAX_OBJECTS } from "@/lib/pipeline/listObjects";
 import {
   MAX_SAM_CALLS,
@@ -31,6 +39,21 @@ const SSE_HEADERS = {
   Connection: "keep-alive",
 };
 
+const RATE_LIMIT_MESSAGE =
+  "Too many builds from your address. Please wait a while and try again.";
+
+/**
+ * Test-visible: fixed-string SSE error event plus a sanitized one-line
+ * server log. Never echoes upstream text, keys, or stacks.
+ */
+export function reportLiveError(
+  send: (event: string, data: unknown) => void,
+  error: unknown,
+): void {
+  console.error("[build-level] live build failed:", describeError(error));
+  send("error", { message: messageFor(error) });
+}
+
 async function liveBuildLevel(req: NextRequest): Promise<Response> {
   let photo: File | null = null;
   try {
@@ -57,6 +80,23 @@ async function liveBuildLevel(req: NextRequest): Promise<Response> {
     return Response.json(
       { error: "Please choose a JPEG, PNG or WebP photo." },
       { status: 400 },
+    );
+  }
+  // Best-effort spend guard, before the key check so it also covers a
+  // misconfigured server (broken-server hits still consume quota; accepted).
+  const ip = clientIp(req.headers);
+  const ipAllowed = ipLimiter.check(
+    ip,
+    envMax("RATE_LIMIT_MAX", IP_MAX_BUILDS),
+  );
+  const globallyAllowed = globalLimiter.check(
+    "global",
+    envMax("RATE_LIMIT_GLOBAL_MAX", GLOBAL_MAX_BUILDS),
+  );
+  if (!ipAllowed || !globallyAllowed) {
+    return Response.json(
+      { error: RATE_LIMIT_MESSAGE },
+      { status: 429, headers: { "Retry-After": "3600" } },
     );
   }
   try {
@@ -155,10 +195,8 @@ async function liveBuildLevel(req: NextRequest): Promise<Response> {
           notes: [...retryNotes, ...notes],
         });
         send("complete", level);
-      } catch {
-        send("error", {
-          message: "The level couldn't be built. Please try again.",
-        });
+      } catch (error) {
+        reportLiveError(send, error);
       } finally {
         controller.close();
       }

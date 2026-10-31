@@ -1,5 +1,11 @@
 import type { Role } from "../level";
-import { SPARK_MODEL, getMetaClient } from "../meta";
+import {
+  MetaError,
+  SPARK_MODEL,
+  ZeroObjectsError,
+  getMetaClient,
+  withMetaRetry,
+} from "../meta";
 
 export interface ListedObject {
   label: string;
@@ -160,31 +166,34 @@ export async function listObjects(imageDataUrl: string): Promise<ListedResult> {
   const started = Date.now();
   let response: { output_text?: string };
   try {
-    response = (await client.responses.create({
-      model: SPARK_MODEL,
-      input: [
-        {
-          role: "user",
-          content: [
-            { type: "input_text", text: PROMPT },
-            { type: "input_image", image_url: imageDataUrl, detail: "auto" },
-          ],
+    response = (await withMetaRetry(() =>
+      client.responses.create({
+        model: SPARK_MODEL,
+        input: [
+          {
+            role: "user",
+            content: [
+              { type: "input_text", text: PROMPT },
+              { type: "input_image", image_url: imageDataUrl, detail: "auto" },
+            ],
+          },
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "object_list",
+            schema: SCHEMA,
+            strict: true,
+          },
         },
-      ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "object_list",
-          schema: SCHEMA,
-          strict: true,
-        },
-      },
-      reasoning: { effort: "low" },
-      max_output_tokens: 2048,
-    })) as { output_text?: string };
+        reasoning: { effort: "low" },
+        max_output_tokens: 2048,
+      }),
+    )) as { output_text?: string };
   } catch (error) {
-    throw new Error(
-      `Spark request failed: ${readableError(error)} (after ${Date.now() - started} ms)`,
+    throw new MetaError(
+      `Spark request failed after ${Date.now() - started} ms`,
+      error,
     );
   }
   const latencyMs = Date.now() - started;
@@ -192,23 +201,21 @@ export async function listObjects(imageDataUrl: string): Promise<ListedResult> {
   try {
     parsed = JSON.parse(response.output_text ?? "");
   } catch {
-    throw new Error(
-      `Spark returned invalid JSON (after ${latencyMs} ms): ${(response.output_text ?? "").slice(0, 200)}`,
-    );
+    throw new Error(`Spark returned invalid JSON after ${latencyMs} ms`);
+  }
+  if (
+    typeof parsed === "object" &&
+    parsed !== null &&
+    Array.isArray((parsed as { objects?: unknown }).objects) &&
+    (parsed as { objects: unknown[] }).objects.length === 0
+  ) {
+    throw new ZeroObjectsError();
   }
   const result = validateObjectList(parsed);
   if (!result.ok) {
     throw new Error(
-      `Spark output failed validation (after ${latencyMs} ms): ${result.errors.join("; ")}`,
+      `Spark output failed validation after ${latencyMs} ms: ${result.errors.join("; ")}`,
     );
   }
   return { list: result.list, latencyMs };
-}
-
-function readableError(error: unknown): string {
-  if (error && typeof error === "object" && "status" in error) {
-    const e = error as { status?: unknown; message?: unknown };
-    return `status ${String(e.status)}: ${typeof e.message === "string" ? e.message : JSON.stringify(e.message)}`;
-  }
-  return error instanceof Error ? error.message : String(error);
 }
