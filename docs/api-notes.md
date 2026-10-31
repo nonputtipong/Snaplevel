@@ -50,6 +50,9 @@ Working notes on the Meta Model API as used by Snaplevel. No keys or account ide
   stove→rescued (1), curtain→rescued (3), table→still zero (dark lamp photo),
   mug→still zero (tiny cup). 4/6 rescued; failures look genuinely hard (dark,
   tiny), not phrasing. A single retry with a simpler synonym looks worthwhile.
+- Shipped Oct 31: Spark returns a fallback noun per object; zero-match phrases
+  retry once (cap 12 SAM calls/photo). Live: garage 3/4 rescued, lamp 2/2,
+  kitchen 0/0 zero-matches; totals 10–17 s.
 
 ## listObjects sample results (Oct 30, merged prompt, all valid)
 

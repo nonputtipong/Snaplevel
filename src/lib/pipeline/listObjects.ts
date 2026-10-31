@@ -6,6 +6,8 @@ export interface ListedObject {
   phrase: string;
   role: Role;
   reason: string;
+  /** Simpler retry noun, or null when Spark's fallback was unusable. */
+  fallback: string | null;
 }
 
 export interface ObjectList {
@@ -36,10 +38,12 @@ export function validateObjectList(value: unknown): ObjectListResult {
   }
   let platforms = 0;
   let hazards = 0;
+  const fallbacks: (string | null)[] = [];
   objects.forEach((object, index) => {
     const at = `objects[${index}]`;
     if (typeof object !== "object" || object === null || Array.isArray(object)) {
       errors.push(`${at} must be an object`);
+      fallbacks.push(null);
       return;
     }
     const entry = object as {
@@ -47,6 +51,7 @@ export function validateObjectList(value: unknown): ObjectListResult {
       phrase?: unknown;
       role?: unknown;
       reason?: unknown;
+      fallback?: unknown;
     };
     if (typeof entry.label !== "string" || entry.label.length === 0) {
       errors.push(`${at}.label must be a non-empty string`);
@@ -54,6 +59,7 @@ export function validateObjectList(value: unknown): ObjectListResult {
     if (typeof entry.phrase !== "string" || entry.phrase.length === 0) {
       errors.push(`${at}.phrase must be a non-empty string`);
     }
+    fallbacks.push(cleanFallback(entry.fallback, entry.phrase));
     if (typeof entry.role !== "string" || !ROLES.includes(entry.role as Role)) {
       errors.push(`${at}.role must be one of ${ROLES.join("|")}`);
     } else {
@@ -74,15 +80,44 @@ export function validateObjectList(value: unknown): ObjectListResult {
   if (hazards * 5 > objects.length) {
     errors.push("hazards must be at most 20% of objects");
   }
-  return errors.length > 0
-    ? { ok: false, errors }
-    : { ok: true, list: value as unknown as ObjectList };
+  if (errors.length > 0) {
+    return { ok: false, errors };
+  }
+  return {
+    ok: true,
+    list: {
+      objects: (objects as ListedObject[]).map((object, index) => ({
+        ...object,
+        fallback: fallbacks[index],
+      })),
+    },
+  };
+}
+
+/**
+ * A usable fallback is one plain common noun: non-empty, no whitespace,
+ * different from the phrase. Anything else degrades to null (no retry)
+ * instead of failing the photo.
+ */
+function cleanFallback(fallback: unknown, phrase: unknown): string | null {
+  if (typeof fallback !== "string") {
+    return null;
+  }
+  const word = fallback.trim();
+  if (word.length === 0 || /\s/.test(word)) {
+    return null;
+  }
+  if (typeof phrase === "string" && word.toLowerCase() === phrase.toLowerCase()) {
+    return null;
+  }
+  return word;
 }
 
 const PROMPT =
   "Look at this photo. List up to 8 large, distinct, solid objects a game character could stand on or bounce off. " +
   "Prefer big furniture-like things. For each object give a short label, a concrete noun phrase WITHOUT color adjectives " +
-  "(generic words like 'mug' or 'sofa'), a game role, and a one-sentence reason. " +
+  "(generic words like 'mug' or 'sofa'), a game role, a one-sentence reason, and a fallback: one plain common noun, " +
+  "no adjectives, different from the phrase (used only if the phrase matches nothing). " +
   "Roles: platform (solid ground), bouncy (round, elastic things), slippery (smooth, polished or icy surfaces), " +
   "hazard (hot, sharp or dangerous things), decor (flat background things with no collision: posters, curtains, clouds). " +
   "Rules: at least two objects must be platforms; at most one hazard, and none if there are fewer than 5 objects; " +
@@ -104,8 +139,9 @@ const SCHEMA = {
             enum: ["platform", "bouncy", "slippery", "hazard", "decor"],
           },
           reason: { type: "string" },
+          fallback: { type: "string" },
         },
-        required: ["label", "phrase", "role", "reason"],
+        required: ["label", "phrase", "role", "reason", "fallback"],
         additionalProperties: false,
       },
     },

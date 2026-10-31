@@ -98,4 +98,59 @@ describe("validateObjectList", () => {
       expect(result.errors.join(";")).toContain("objects[1].reason");
     }
   });
+
+  test("keeps a valid fallback", () => {
+    const result = validateObjectList({
+      objects: [
+        { ...PLATFORM, fallback: "table" },
+        { ...PLATFORM2, fallback: "couch" },
+      ],
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.list.objects.map((o) => o.fallback)).toEqual([
+        "table",
+        "couch",
+      ]);
+    }
+  });
+
+  test("one bad fallback does not fail the photo", () => {
+    const result = validateObjectList({
+      objects: [
+        { ...PLATFORM, fallback: "table" },
+        { ...PLATFORM2, fallback: "big red couch" },
+      ],
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.list.objects.map((o) => o.fallback)).toEqual([
+        "table",
+        null,
+      ]);
+    }
+  });
+
+  test("empty, same-as-phrase, and missing fallbacks degrade to null", () => {
+    const result = validateObjectList({
+      objects: [
+        { ...PLATFORM, fallback: "" },
+        { ...PLATFORM2, fallback: "Sofa" },
+        {
+          label: "ball",
+          phrase: "rubber ball",
+          role: "bouncy",
+          reason: "Round.",
+        },
+      ],
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.list.objects.map((o) => o.fallback)).toEqual([
+        null,
+        null,
+        null,
+      ]);
+    }
+  });
 });
