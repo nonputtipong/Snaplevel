@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import type { Level, Point, Role } from "@/lib/level";
 import { centroid } from "./geometry";
 import { roleToBodyOptions, type BodyOptions } from "./roles";
+import { PLAYER_JUMP, PLAYER_SPEED, playerSize } from "./physics";
 
 export interface LevelSceneCallbacks {
   onWin: () => void;
@@ -34,8 +35,6 @@ const ART_FILL = 0x94a3b8;
 const ART_LINE = 0x1e293b;
 const PLAYER_COLOR = 0xf8fafc;
 const GOAL_COLOR = 0x22d3ee;
-const PLAYER_SPEED = 0.0062; // × level width, px per physics step
-const PLAYER_JUMP = 0.017; // × level height, px per physics step
 
 export class LevelScene extends Phaser.Scene {
   private level: Level;
@@ -51,6 +50,7 @@ export class LevelScene extends Phaser.Scene {
   private won = false;
   private debugOn = false;
   private debugGfx?: Phaser.GameObjects.Graphics;
+  private debugLabels: Phaser.GameObjects.Text[] = [];
 
   constructor(level: Level, callbacks: LevelSceneCallbacks) {
     super("level");
@@ -108,8 +108,7 @@ export class LevelScene extends Phaser.Scene {
     goalGfx.fillStyle(GOAL_COLOR, 0.9);
     goalGfx.fillCircle(gx, gy, gr * 0.35);
 
-    const pw = Phaser.Math.Clamp(width * 0.032, 20, 36);
-    const ph = Phaser.Math.Clamp(height * 0.045, 28, 52);
+    const { pw, ph } = playerSize(width, height);
     const [sx, sy] = this.level.start;
     const player = this.add.rectangle(sx, sy, pw, ph, PLAYER_COLOR) as MatterRectangle;
     this.matter.add.gameObject(player, {
@@ -307,6 +306,10 @@ export class LevelScene extends Phaser.Scene {
     }
     this.debugOn = !this.debugOn;
     gfx.clear();
+    for (const label of this.debugLabels) {
+      label.destroy();
+    }
+    this.debugLabels = [];
     if (!this.debugOn) {
       return;
     }
@@ -319,6 +322,16 @@ export class LevelScene extends Phaser.Scene {
         gfx.fillPoints(points, true);
         gfx.strokePoints(points, true);
       }
+      const xs = object.parts.flat().map(([x]) => x);
+      const ys = object.parts.flat().map(([, y]) => y);
+      const tag = this.add.text(
+        Math.min(...xs),
+        Math.max(16, Math.min(...ys) - 4),
+        `${object.label}: ${object.role} — ${object.reason}`,
+        { fontSize: "14px", color: "#ffffff", backgroundColor: "#000000" },
+      );
+      tag.setOrigin(0, 1).setDepth(11);
+      this.debugLabels.push(tag);
     }
     gfx.lineStyle(3, 0x22c55e);
     gfx.strokeRect(0, this.level.height - 8, this.level.width, 8);

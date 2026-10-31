@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import * as Phaser from "phaser";
 import type { Level } from "@/lib/level";
 import { LevelScene } from "@/game/LevelScene";
+import { GRAVITY_Y } from "@/game/physics";
 
 export default function GameView({ level }: { level: Level }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -25,7 +26,7 @@ export default function GameView({ level }: { level: Level }) {
       backgroundColor: "#0f172a",
       physics: {
         default: "matter",
-        matter: { gravity: { x: 0, y: 1 } },
+        matter: { gravity: { x: 0, y: GRAVITY_Y } },
       },
       scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
       scene: [scene],
@@ -70,6 +71,7 @@ export default function GameView({ level }: { level: Level }) {
       <p className="text-sm text-slate-400">
         Arrows / A move · Space / W jump · R restart · D outlines
       </p>
+      {level.hint && <p className="text-sm text-amber-200">{level.hint}</p>}
     </div>
   );
 }

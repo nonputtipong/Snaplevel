@@ -101,13 +101,22 @@ async function liveBuildLevel(req: NextRequest): Promise<Response> {
         const samMs = Date.now() - samStarted;
 
         const designStarted = Date.now();
-        const level = assembleLevel({
+        for (const result of results) {
+          if (result.matches.length === 0) {
+            console.info(`[build-level] zero matches, skipping: ${result.phrase}`);
+          } else if (!result.kept) {
+            console.info(`[build-level] dropped under 1% of image area: ${result.phrase}`);
+          }
+        }
+        const { level, notes } = assembleLevel({
           objects: objects.map((o, i) => {
             const kept = results[i].kept;
             return {
               label: o.label,
               phrase: o.phrase,
               reason: o.reason,
+              role: o.role,
+              area: kept?.area ?? 0,
               polygons: kept
                 ? toPolygons({ svgPath: kept.svgPath, box: kept.box })
                 : [],
@@ -130,7 +139,7 @@ async function liveBuildLevel(req: NextRequest): Promise<Response> {
           });
           return;
         }
-        send("progress", { step: "design_level", status: "done" });
+        send("progress", { step: "design_level", status: "done", notes });
         send("complete", level);
       } catch {
         send("error", {

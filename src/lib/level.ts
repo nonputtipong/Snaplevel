@@ -23,6 +23,7 @@ export interface Level {
   style?: string;
   restyledImage?: string;
   timings?: Record<string, number>;
+  hint?: string;
 }
 
 export type ValidationResult =
@@ -120,6 +121,9 @@ export function validateLevel(value: unknown): ValidationResult {
     typeof value.restyledImage !== "string"
   ) {
     errors.push("restyledImage must be a string");
+  }
+  if (value.hint !== undefined && typeof value.hint !== "string") {
+    errors.push("hint must be a string");
   }
   if (value.timings !== undefined) {
     const timings = value.timings;
