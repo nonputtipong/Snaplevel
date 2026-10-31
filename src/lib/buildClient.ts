@@ -5,6 +5,7 @@ export interface ProgressEvent {
   status: string;
   current?: number;
   total?: number;
+  notes?: string[];
 }
 
 export interface SSEFrame {

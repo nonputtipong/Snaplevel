@@ -14,7 +14,7 @@ type State =
   | { name: "idle" }
   | { name: "resizing" }
   | { name: "building"; progress: ProgressEvent | null }
-  | { name: "done"; level: Level }
+  | { name: "done"; level: Level; notes: string[] }
   | { name: "rejected"; message: string }
   | { name: "failed"; message: string }
   | { name: "empty" };
@@ -41,13 +41,17 @@ export default function UploadFlow() {
     try {
       const resized = await resizeImage(photo);
       setState({ name: "building", progress: null });
-      const level = await postBuildLevel(resized, (progress) =>
-        setState({ name: "building", progress }),
-      );
+      let lastNotes: string[] = [];
+      const level = await postBuildLevel(resized, (progress) => {
+        if (progress.notes) {
+          lastNotes = progress.notes;
+        }
+        setState({ name: "building", progress });
+      });
       if (getBuildOutcome(level) === "empty") {
         setState({ name: "empty" });
       } else {
-        setState({ name: "done", level });
+        setState({ name: "done", level, notes: lastNotes });
       }
     } catch (error) {
       setState({
@@ -85,6 +89,11 @@ export default function UploadFlow() {
         >
           New photo
         </button>
+        {state.notes.map((note) => (
+          <p key={note} className="text-sm text-slate-400">
+            {note}
+          </p>
+        ))}
       </div>
     );
   }
@@ -152,6 +161,11 @@ export default function UploadFlow() {
             </div>
           );
         })}
+        {progress?.notes?.map((note) => (
+          <p key={note} className="text-sm text-slate-400">
+            {note}
+          </p>
+        ))}
       </div>
     );
   }

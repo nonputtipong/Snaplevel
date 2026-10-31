@@ -43,6 +43,14 @@ Working notes on the Meta Model API as used by Snaplevel. No keys or account ide
 - Per-request caps and rate limits for SAM and Spark.
 - Whether the Meta console offers a spend limit.
 
+## Synonym-retry probe (Oct 31, P1 evaluation, not built)
+
+- 6 zero-match phrases retried once with a simpler noun (sequential, ~2.7 s
+  each): toolbox→rescued (2 matches), box→rescued (21 matches, kept largest),
+  stove→rescued (1), curtain→rescued (3), table→still zero (dark lamp photo),
+  mug→still zero (tiny cup). 4/6 rescued; failures look genuinely hard (dark,
+  tiny), not phrasing. A single retry with a simpler synonym looks worthwhile.
+
 ## listObjects sample results (Oct 30, merged prompt, all valid)
 
 - desk.jpg (7.2 s, 6): 4×platform (desk, laptop, plant pot, mug), slippery mouse, bouncy earbud case. All concrete.

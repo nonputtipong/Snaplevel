@@ -31,6 +31,26 @@ describe("validateLevel", () => {
     }
   });
 
+  test("accepts an optional hint", () => {
+    const withHint = structuredClone(level1) as unknown as Record<string, unknown>;
+    withHint.hint = "Tip: test hint.";
+    const result = validateLevel(withHint);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.level.hint).toBe("Tip: test hint.");
+    }
+  });
+
+  test("rejects a non-string hint", () => {
+    const broken = structuredClone(level1) as unknown as Record<string, unknown>;
+    broken.hint = 42;
+    const result = validateLevel(broken);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.join(";")).toContain("hint must be a string");
+    }
+  });
+
   test("rejects an unknown role", () => {
     const broken = structuredClone(level1) as unknown as Record<string, unknown>;
     const objects = broken.objects as Record<string, unknown>[];
