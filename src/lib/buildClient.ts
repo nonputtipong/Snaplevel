@@ -46,6 +46,17 @@ export function getBuildOutcome(level: Level): BuildOutcome {
   return level.objects.length === 0 ? "empty" : "ok";
 }
 
+/**
+ * "Try a sample photo" must never spend credits: live mode serves a fixture,
+ * mock mode keeps the free pipeline (unchanged behavior).
+ */
+export function sampleMode(mockMode: boolean): "pipeline" | "fixture" {
+  return mockMode ? "pipeline" : "fixture";
+}
+
+export const SAMPLE_FIXTURE_NOTE =
+  "Example level — upload a photo to build your own.";
+
 async function statusError(res: Response): Promise<string> {
   try {
     const body = (await res.json()) as { error?: unknown };
