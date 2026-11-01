@@ -5,16 +5,16 @@ import { roleToBodyOptions, type BodyOptions } from "./roles";
 import { PLAYER_JUMP, PLAYER_SPEED, playerSize } from "./physics";
 import { releaseTouch, takeQueuedJump, touchInput } from "./touchInput";
 import { resolveFrameInput } from "./frameInput";
+import {
+  findFreeSpot,
+  nextRescueState,
+  pointInPolygon,
+  type RescueState,
+} from "./rescue";
+import { playSfx } from "./sfx";
 
 export interface LevelSceneCallbacks {
   onWin: () => void;
-}
-
-interface MatterRectangle extends Phaser.GameObjects.Rectangle {
-  setVelocity(x: number, y: number): this;
-  setVelocityX(x: number): this;
-  setVelocityY(y: number): this;
-  setFixedRotation(): this;
 }
 
 interface MatterBodyModule {
@@ -35,13 +35,19 @@ interface CollisionPair {
 
 const ART_FILL = 0x94a3b8;
 const ART_LINE = 0x1e293b;
-const PLAYER_COLOR = 0xf8fafc;
 const GOAL_COLOR = 0x22d3ee;
+
+// Camera: hold the full-level fit, then ease to a follow zoom on small
+// displays. FOLLOW_MIN_SHORT_SIDE is canvas CSS px: a phone portrait fit
+// (~270px short side) engages follow, a desktop fit (~750px) stays whole.
+const CAMERA_HOLD_MS = 1500;
+const FOLLOW_ZOOM = 1.2;
+const FOLLOW_MIN_SHORT_SIDE = 480;
 
 export class LevelScene extends Phaser.Scene {
   private level: Level;
   private callbacks: LevelSceneCallbacks;
-  private player?: MatterRectangle;
+  private player?: Phaser.Physics.Matter.Image;
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private keyW?: Phaser.Input.Keyboard.Key;
   private keyA?: Phaser.Input.Keyboard.Key;
@@ -53,6 +59,10 @@ export class LevelScene extends Phaser.Scene {
   private debugOn = false;
   private debugGfx?: Phaser.GameObjects.Graphics;
   private debugLabels: Phaser.GameObjects.Text[] = [];
+  private dust?: Phaser.GameObjects.Particles.ParticleEmitter;
+  private confetti?: Phaser.GameObjects.Particles.ParticleEmitter;
+  private solidParts: Point[][] = [];
+  private rescueState: RescueState = { airFrames: 0 };
 
   constructor(level: Level, callbacks: LevelSceneCallbacks) {
     super("level");
@@ -75,12 +85,37 @@ export class LevelScene extends Phaser.Scene {
     const { width, height } = this.level;
     this.groundSolids.clear();
     this.roleById = new Map(this.level.objects.map((o) => [o.id, o.role]));
+    this.solidParts = [];
+    this.rescueState = { airFrames: 0 };
     this.won = false;
     this.debugOn = false;
 
+    this.makeTextures();
     this.add.image(0, 0, "bg").setOrigin(0).setDisplaySize(width, height);
     this.drawLevelArt();
     this.debugGfx = this.add.graphics().setDepth(10);
+    this.dust = this.add.particles(0, 0, "sl-dot", {
+      speed: { min: 40, max: 130 },
+      lifespan: 350,
+      quantity: 0,
+      scale: { start: 0.9, end: 0 },
+      alpha: { start: 0.7, end: 0 },
+      tint: 0xe2e8f0,
+    });
+    this.dust.setDepth(9);
+    this.confetti = this.add.particles(0, 0, "sl-dot", {
+      speed: { min: 150, max: 360 },
+      gravityY: 500,
+      lifespan: 1000,
+      quantity: 0,
+      scale: { start: 1, end: 0 },
+      tint: [0x34d399, 0x22d3ee, 0xfbbf24, 0xf472b6],
+    });
+    this.confetti.setDepth(12);
+
+    const cam = this.cameras.main;
+    cam.setBounds(0, 0, width, height);
+    this.time.delayedCall(CAMERA_HOLD_MS, () => this.engageFollowCamera());
 
     for (const object of this.level.objects) {
       const options = roleToBodyOptions(object.role);
@@ -88,6 +123,9 @@ export class LevelScene extends Phaser.Scene {
         continue;
       }
       const kind = object.role === "hazard" ? "hazard" : "solid";
+      if (!options.isSensor) {
+        this.solidParts.push(...object.parts);
+      }
       for (const part of object.parts) {
         this.addStaticPart(part, `${kind}:${object.id}`, options);
       }
@@ -115,12 +153,13 @@ export class LevelScene extends Phaser.Scene {
 
     const { pw, ph } = playerSize(width, height);
     const [sx, sy] = this.level.start;
-    const player = this.add.rectangle(sx, sy, pw, ph, PLAYER_COLOR) as MatterRectangle;
-    this.matter.add.gameObject(player, {
+    const player = this.matter.add.image(sx, sy, "sl-player", undefined, {
       label: "player",
       restitution: 0,
       friction: 0.1,
+      shape: { type: "rectangle", width: pw, height: ph },
     });
+    player.setDisplaySize(pw, ph);
     player.setFixedRotation();
     this.player = player;
 
@@ -181,12 +220,16 @@ export class LevelScene extends Phaser.Scene {
     });
     if (frame.vx !== 0) {
       player.setVelocityX(frame.vx * speed);
+      player.setFlipX(frame.vx < 0);
     } else if (!this.onSlippery()) {
       player.setVelocityX(0);
     }
     if (frame.jump) {
       player.setVelocityY(-this.level.height * PLAYER_JUMP);
+      this.dust?.explode(6, player.x, player.y + player.displayHeight / 2);
+      playSfx("jump");
     }
+    this.maybeRescue(player);
     if (Phaser.Input.Keyboard.JustDown(this.keyR)) {
       this.scene.restart();
     }
@@ -259,10 +302,32 @@ export class LevelScene extends Phaser.Scene {
     if (other.startsWith("solid:")) {
       if (started) {
         this.groundSolids.add(other);
+        if (this.roleById.get(other.slice("solid:".length)) === "bouncy") {
+          this.bounceEffect();
+        }
       } else {
         this.groundSolids.delete(other);
       }
     }
+  }
+
+  private bounceEffect(): void {
+    const player = this.player;
+    if (!player) {
+      return;
+    }
+    playSfx("bounce");
+    const ring = this.add
+      .circle(player.x, player.y, 12)
+      .setStrokeStyle(4, 0xfbbf24)
+      .setDepth(9);
+    this.tweens.add({
+      targets: ring,
+      scale: 2.4,
+      alpha: 0,
+      duration: 300,
+      onComplete: () => ring.destroy(),
+    });
   }
 
   private onSlippery(): boolean {
@@ -285,6 +350,11 @@ export class LevelScene extends Phaser.Scene {
     );
     this.player.setVelocity(0, 0);
     this.groundSolids.clear();
+    this.rescueState = { airFrames: 0 };
+    playSfx("respawn");
+    this.dust?.explode(8, x, y);
+    this.player.setAlpha(0.25);
+    this.tweens.add({ targets: this.player, alpha: 1, duration: 400 });
   }
 
   private win(): void {
@@ -293,6 +363,10 @@ export class LevelScene extends Phaser.Scene {
     }
     this.won = true;
     this.player?.setVelocity(0, 0);
+    playSfx("win");
+    const [gx, gy] = this.level.goal;
+    this.confetti?.explode(36, gx, gy);
+    this.cameras.main.flash(250, 255, 255, 255);
     this.callbacks.onWin();
   }
 
@@ -301,12 +375,101 @@ export class LevelScene extends Phaser.Scene {
     gfx.fillStyle(ART_FILL, 0.85);
     gfx.lineStyle(2, ART_LINE);
     for (const object of this.level.objects) {
+      const options = roleToBodyOptions(object.role);
+      const solid = options.collides && !options.isSensor;
       for (const part of object.parts) {
         const points = part.map(([x, y]) => ({ x, y }));
         gfx.fillPoints(points, true);
         gfx.strokePoints(points, true);
+        if (solid) {
+          gfx.lineStyle(7, 0xffffff, 0.1);
+          gfx.strokePoints(points, true);
+          gfx.lineStyle(2, 0xffffff, 0.35);
+          gfx.strokePoints(points, true);
+          gfx.lineStyle(2, ART_LINE);
+        }
       }
     }
+  }
+
+  /** Code-drawn textures: the player sprite and a particle dot. Guarded
+   * because create() re-runs on scene restart. */
+  private makeTextures(): void {
+    if (!this.textures.exists("sl-player")) {
+      const body = this.add.graphics();
+      body.fillStyle(0x34d399, 1);
+      body.fillRoundedRect(0, 0, 48, 60, 14);
+      body.fillStyle(0xffffff, 1);
+      body.fillCircle(16, 24, 7);
+      body.fillCircle(32, 24, 7);
+      body.fillStyle(0x0f172a, 1);
+      body.fillCircle(18, 25, 3.5);
+      body.fillCircle(34, 25, 3.5);
+      body.generateTexture("sl-player", 48, 60);
+      body.destroy();
+    }
+    if (!this.textures.exists("sl-dot")) {
+      const dot = this.add.graphics();
+      dot.fillStyle(0xffffff, 1);
+      dot.fillCircle(8, 8, 8);
+      dot.generateTexture("sl-dot", 16, 16);
+      dot.destroy();
+    }
+  }
+
+  /** After the full-level hold, ease into a follow zoom on small displays;
+   * large displays keep the whole level with no follow. */
+  private engageFollowCamera(): void {
+    const player = this.player;
+    if (!player || !this.scene.isActive()) {
+      return;
+    }
+    const bounds = this.scale.canvasBounds;
+    if (Math.min(bounds.width, bounds.height) >= FOLLOW_MIN_SHORT_SIDE) {
+      return;
+    }
+    const cam = this.cameras.main;
+    cam.zoomTo(FOLLOW_ZOOM, 900, "Sine.easeInOut");
+    cam.startFollow(player, false, 0.08, 0.08);
+    cam.setDeadzone(this.level.width * 0.2, this.level.height * 0.15);
+  }
+
+  private maybeRescue(player: Phaser.Physics.Matter.Image): void {
+    const decision = nextRescueState(this.rescueState, {
+      embedded: this.isEmbedded(player.x, player.y),
+      hasContact: this.groundSolids.size > 0,
+      aboveKillLine: player.y <= this.level.height + 60,
+    });
+    this.rescueState = decision.state;
+    if (!decision.rescue) {
+      return;
+    }
+    const spot = findFreeSpot(player.x, player.y, (x, y) =>
+      this.isEmbedded(x, y),
+    ) ?? { x: player.x, y: player.y - 120 };
+    const x = Math.min(Math.max(spot.x, 8), this.level.width - 8);
+    const y = Math.min(Math.max(spot.y, 8), this.level.height - 8);
+    (this.matter.body as unknown as MatterBodyModule).setPosition(
+      player.body,
+      { x, y },
+    );
+    player.setVelocity(0, 0);
+    this.groundSolids.clear();
+    this.dust?.explode(8, x, y);
+  }
+
+  /** True when a point sits inside the floor strip or any solid part. */
+  private isEmbedded(x: number, y: number): boolean {
+    const { width, height } = this.level;
+    if (x >= 0 && x <= width && y >= height - 8 && y <= height) {
+      return true;
+    }
+    return this.solidParts.some((part) => pointInPolygon(part, x, y));
+  }
+
+  /** Public outline toggle for the HUD button (touch has no D key). */
+  toggleOutlines(): void {
+    this.toggleDebug();
   }
 
   private toggleDebug(): void {
