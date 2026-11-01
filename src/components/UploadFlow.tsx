@@ -188,7 +188,6 @@ export default function UploadFlow({
         ref={inputRef}
         type="file"
         accept="image/jpeg,image/png,image/webp"
-        capture="environment"
         className="hidden"
         onChange={(event) => {
           onFile(event.target.files?.[0]);

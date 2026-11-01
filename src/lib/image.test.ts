@@ -19,4 +19,13 @@ describe("checkUpload", () => {
       checkUpload({ type: "image/png", size: MAX_UPLOAD_BYTES + 1 }),
     ).toBe("Please choose a photo smaller than 5 MB.");
   });
+
+  test("rejects HEIC with a Photo Library pointer", () => {
+    expect(checkUpload({ type: "image/heic", size: 100 })).toBe(
+      "That photo is an iPhone HEIC file, which browsers can't read. Pick it from your Photo Library instead and it will arrive as a JPEG.",
+    );
+    expect(checkUpload({ type: "image/heif", size: 100 })).toContain(
+      "Photo Library",
+    );
+  });
 });

@@ -6,6 +6,7 @@ import * as Phaser from "phaser";
 import type { Level } from "@/lib/level";
 import { LevelScene } from "@/game/LevelScene";
 import { GRAVITY_Y } from "@/game/physics";
+import TouchControls from "./TouchControls";
 
 export default function GameView({ level }: { level: Level }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -45,7 +46,7 @@ export default function GameView({ level }: { level: Level }) {
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-2">
-      <div ref={hostRef} className="relative flex min-h-0 w-full flex-1 items-center justify-center [&>canvas]:rounded-lg" />
+      <div ref={hostRef} className="relative flex min-h-0 w-full flex-1 touch-none items-center justify-center select-none [&>canvas]:rounded-lg" />
       {won && (
         <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/60">
           <div className="flex flex-col items-center gap-4 rounded-xl bg-slate-900 px-10 py-8 shadow-xl">
@@ -68,8 +69,12 @@ export default function GameView({ level }: { level: Level }) {
           </div>
         </div>
       )}
-      <p className="text-sm text-slate-400">
+      <TouchControls onRestart={playAgain} />
+      <p className="text-sm text-slate-400 [@media(pointer:coarse)]:hidden">
         Arrows / A move · Space / W jump · R restart · D outlines
+      </p>
+      <p className="hidden text-sm text-slate-400 [@media(pointer:coarse)]:block">
+        ◀ ▶ move · ▲ jump · ⟳ restart
       </p>
       {level.hint && <p className="text-sm text-amber-200">{level.hint}</p>}
     </div>
