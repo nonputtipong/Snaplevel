@@ -4,6 +4,9 @@ const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 /** Returns a user-facing rejection message, or null when the file is fine. */
 export function checkUpload(file: { type: string; size: number }): string | null {
+  if (file.type === "image/heic" || file.type === "image/heif") {
+    return "That photo is an iPhone HEIC file, which browsers can't read. Pick it from your Photo Library instead and it will arrive as a JPEG.";
+  }
   if (!ACCEPTED_TYPES.includes(file.type)) {
     return "Please choose a JPEG, PNG or WebP photo.";
   }

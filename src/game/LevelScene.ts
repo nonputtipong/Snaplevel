@@ -3,6 +3,7 @@ import type { Level, Point, Role } from "@/lib/level";
 import { centroid } from "./geometry";
 import { roleToBodyOptions, type BodyOptions } from "./roles";
 import { PLAYER_JUMP, PLAYER_SPEED, playerSize } from "./physics";
+import { releaseTouch, takeQueuedJump, touchInput } from "./touchInput";
 
 export interface LevelSceneCallbacks {
   onWin: () => void;
@@ -59,6 +60,7 @@ export class LevelScene extends Phaser.Scene {
   }
 
   restartLevel(): void {
+    releaseTouch();
     this.scene.restart();
   }
 
@@ -67,6 +69,8 @@ export class LevelScene extends Phaser.Scene {
   }
 
   create(): void {
+    releaseTouch();
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, releaseTouch);
     const { width, height } = this.level;
     this.groundSolids.clear();
     this.roleById = new Map(this.level.objects.map((o) => [o.id, o.role]));
@@ -163,14 +167,15 @@ export class LevelScene extends Phaser.Scene {
       return;
     }
     const speed = this.level.width * PLAYER_SPEED;
-    if (this.cursors.left.isDown || this.keyA.isDown) {
+    if (this.cursors.left.isDown || this.keyA.isDown || touchInput.left) {
       player.setVelocityX(-speed);
-    } else if (this.cursors.right.isDown) {
+    } else if (this.cursors.right.isDown || touchInput.right) {
       player.setVelocityX(speed);
     } else if (!this.onSlippery()) {
       player.setVelocityX(0);
     }
     const jumpPressed =
+      takeQueuedJump() ||
       Phaser.Input.Keyboard.JustDown(this.cursors.space) ||
       Phaser.Input.Keyboard.JustDown(this.cursors.up) ||
       Phaser.Input.Keyboard.JustDown(this.keyW);
