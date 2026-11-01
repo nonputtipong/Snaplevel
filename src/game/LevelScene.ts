@@ -4,6 +4,7 @@ import { centroid } from "./geometry";
 import { roleToBodyOptions, type BodyOptions } from "./roles";
 import { PLAYER_JUMP, PLAYER_SPEED, playerSize } from "./physics";
 import { releaseTouch, takeQueuedJump, touchInput } from "./touchInput";
+import { resolveFrameInput } from "./frameInput";
 
 export interface LevelSceneCallbacks {
   onWin: () => void;
@@ -167,19 +168,23 @@ export class LevelScene extends Phaser.Scene {
       return;
     }
     const speed = this.level.width * PLAYER_SPEED;
-    if (this.cursors.left.isDown || this.keyA.isDown || touchInput.left) {
-      player.setVelocityX(-speed);
-    } else if (this.cursors.right.isDown || touchInput.right) {
-      player.setVelocityX(speed);
+    const frame = resolveFrameInput({
+      moveLeft:
+        this.cursors.left.isDown || this.keyA.isDown || touchInput.left,
+      moveRight: this.cursors.right.isDown || touchInput.right,
+      jump:
+        takeQueuedJump() ||
+        Phaser.Input.Keyboard.JustDown(this.cursors.space) ||
+        Phaser.Input.Keyboard.JustDown(this.cursors.up) ||
+        Phaser.Input.Keyboard.JustDown(this.keyW),
+      grounded: this.groundSolids.size > 0,
+    });
+    if (frame.vx !== 0) {
+      player.setVelocityX(frame.vx * speed);
     } else if (!this.onSlippery()) {
       player.setVelocityX(0);
     }
-    const jumpPressed =
-      takeQueuedJump() ||
-      Phaser.Input.Keyboard.JustDown(this.cursors.space) ||
-      Phaser.Input.Keyboard.JustDown(this.cursors.up) ||
-      Phaser.Input.Keyboard.JustDown(this.keyW);
-    if (jumpPressed && this.groundSolids.size > 0) {
+    if (frame.jump) {
       player.setVelocityY(-this.level.height * PLAYER_JUMP);
     }
     if (Phaser.Input.Keyboard.JustDown(this.keyR)) {
