@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   getBuildOutcome,
+  sampleMode,
   postBuildLevel,
   splitSSEEvents,
 } from "./buildClient";
@@ -113,5 +114,15 @@ describe("postBuildLevel", () => {
     } finally {
       globalThis.fetch = realFetch;
     }
+  });
+});
+
+describe("sampleMode", () => {
+  test("mock mode keeps the free pipeline", () => {
+    expect(sampleMode(true)).toBe("pipeline");
+  });
+
+  test("live mode serves a fixture instead of building", () => {
+    expect(sampleMode(false)).toBe("fixture");
   });
 });

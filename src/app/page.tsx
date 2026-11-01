@@ -26,7 +26,10 @@ export default function Home() {
         </p>
       </div>
 
-      <UploadFlow />
+      <UploadFlow
+        mockMode={process.env.MOCK_MODE === "1"}
+        sampleLevel={examples[0]?.level ?? null}
+      />
 
       <p className="max-w-md text-center text-sm text-slate-400">
         Your photo is processed by Meta&apos;s models to build the level. We

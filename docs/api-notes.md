@@ -41,7 +41,9 @@ Working notes on the Meta Model API as used by Snaplevel. No keys or account ide
 ## Open questions
 
 - Per-request caps and rate limits for SAM and Spark.
-- Whether the Meta console offers a spend limit.
+- Whether the Meta console offers a spend limit: public sources checked
+  Nov 1 (portal dev.meta.ai, usage + billing pages) — no spend-cap control
+  documented. Owner to check the team Billing page directly.
 
 ## Synonym-retry probe (Oct 31, P1 evaluation, not built)
 

@@ -4,8 +4,10 @@ import { useRef, useState } from "react";
 import GameViewLoader from "./GameViewLoader";
 import { checkUpload, makeSamplePhoto, resizeImage } from "@/lib/image";
 import {
+  SAMPLE_FIXTURE_NOTE,
   getBuildOutcome,
   postBuildLevel,
+  sampleMode,
   type ProgressEvent,
 } from "@/lib/buildClient";
 import type { Level } from "@/lib/level";
@@ -30,7 +32,13 @@ function stepLabel(progress: ProgressEvent | null, step: string): string {
   return "Outlining objects";
 }
 
-export default function UploadFlow() {
+export default function UploadFlow({
+  mockMode,
+  sampleLevel,
+}: {
+  mockMode: boolean;
+  sampleLevel: Level | null;
+}) {
   const [state, setState] = useState<State>({ name: "idle" });
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -75,6 +83,10 @@ export default function UploadFlow() {
   };
 
   const onSample = async () => {
+    if (sampleMode(mockMode) === "fixture" && sampleLevel) {
+      setState({ name: "done", level: sampleLevel, notes: [SAMPLE_FIXTURE_NOTE] });
+      return;
+    }
     void runPipeline(await makeSamplePhoto());
   };
 
@@ -190,13 +202,15 @@ export default function UploadFlow() {
       >
         Upload or take a photo
       </button>
-      <button
-        type="button"
-        onClick={() => void onSample()}
-        className="text-sm text-slate-300 underline underline-offset-4 hover:text-white"
-      >
-        Try a sample photo
-      </button>
+      {(mockMode || sampleLevel) && (
+        <button
+          type="button"
+          onClick={() => void onSample()}
+          className="text-sm text-slate-300 underline underline-offset-4 hover:text-white"
+        >
+          Try a sample photo
+        </button>
+      )}
     </div>
   );
 }
