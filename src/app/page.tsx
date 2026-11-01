@@ -18,9 +18,12 @@ export default function Home() {
   });
 
   return (
-    <main className="flex min-h-dvh flex-col items-center gap-10 bg-slate-950 px-4 py-10 text-slate-100">
-      <div className="flex max-w-2xl flex-col items-center gap-4 text-center">
-        <h1 className="text-4xl font-bold tracking-tight">Snaplevel</h1>
+    <main className="flex min-h-dvh flex-col items-center gap-8 bg-gradient-to-b from-slate-950 via-slate-950 to-emerald-950/40 px-4 py-10 text-slate-100 sm:gap-10">
+      <div className="flex max-w-2xl flex-col items-center gap-3 text-center sm:gap-4">
+        <p className="text-5xl">📸</p>
+        <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
+          Snaplevel
+        </h1>
         <p className="text-lg text-slate-300">
           Snap a photo of anything and play it as a game level.
         </p>
@@ -43,7 +46,7 @@ export default function Home() {
             <Link
               key={index}
               href={`/play?fixture=${index}`}
-              className="overflow-hidden rounded-xl bg-slate-900 hover:bg-slate-800"
+              className="overflow-hidden rounded-2xl bg-slate-900 ring-1 ring-slate-800 hover:bg-slate-800 hover:ring-emerald-500/50"
             >
               <img
                 src={level.image}
