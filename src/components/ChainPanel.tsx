@@ -43,7 +43,8 @@ export default function ChainPanel({
     <div
       role="dialog"
       aria-label="Model chain"
-      className="fixed inset-0 z-20 flex items-center justify-center bg-black/60 px-4 py-4"
+      className="fixed inset-0 z-20 flex items-center justify-center bg-black/60 px-4 py-4 select-text [-webkit-touch-callout:default]"
+      onContextMenu={(event) => event.stopPropagation()}
     >
       <div className="flex max-h-[85dvh] w-full max-w-2xl flex-col gap-4 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 px-4 py-4 sm:px-6">
         <div className="flex items-center justify-between">
@@ -52,7 +53,7 @@ export default function ChainPanel({
             type="button"
             onClick={onClose}
             aria-label="Close model chain"
-            className="rounded-full bg-slate-800 px-3 py-1.5 text-sm text-slate-100 hover:bg-slate-700"
+            className="inline-flex min-h-[44px] touch-manipulation items-center rounded-full bg-slate-800 px-3 py-1.5 text-sm text-slate-100 hover:bg-slate-700"
           >
             ✕ Close
           </button>
