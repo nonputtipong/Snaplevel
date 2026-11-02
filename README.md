@@ -43,4 +43,4 @@ See `docs/api-notes.md` for verified API behavior and measurements.
 
 ## Photo credits
 
-Example photos by the author (own work, CC0).
+Example images are AI-generated (ChatGPT).

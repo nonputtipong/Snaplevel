@@ -6,9 +6,9 @@ import level2 from "../../fixtures/level-2.json";
 import level3 from "../../fixtures/level-3.json";
 
 const EXAMPLES = [
-  { index: 0, title: "Work Desk 1", raw: level1 },
-  { index: 1, title: "Work Desk 2", raw: level2 },
-  { index: 2, title: "Home Desk", raw: level3 },
+  { index: 0, title: "Workbench", raw: level1 },
+  { index: 1, title: "Living Room", raw: level2 },
+  { index: 2, title: "Patio", raw: level3 },
 ];
 
 export default function Home() {

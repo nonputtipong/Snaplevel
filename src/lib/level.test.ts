@@ -8,26 +8,35 @@ import levelEmpty from "../../fixtures/level-empty.json";
 
 describe("validateLevel", () => {
   test("accepts fixture 1", () => {
-    expect(validateLevel(level1).ok).toBe(true);
-  });
-
-  test("accepts portrait fixture 2", () => {
-    const result = validateLevel(level2);
+    const result = validateLevel(level1);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.level.width).toBe(768);
+      expect(result.level.width).toBe(1536);
       expect(result.level.height).toBe(1024);
+      expect(result.level.start).toEqual([506, 425]);
+      expect(result.level.goal).toEqual([1349, 344]);
     }
   });
 
-  test("accepts portrait fixture 3", () => {
+  test("accepts fixture 2", () => {
+    const result = validateLevel(level2);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.level.width).toBe(1536);
+      expect(result.level.height).toBe(1024);
+      expect(result.level.start).toEqual([124, 443]);
+      expect(result.level.goal).toEqual([1423, 613]);
+    }
+  });
+
+  test("accepts fixture 3", () => {
     const result = validateLevel(level3);
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.level.width).toBe(768);
+      expect(result.level.width).toBe(1536);
       expect(result.level.height).toBe(1024);
-      expect(result.level.start).toEqual([60, 977]);
-      expect(result.level.goal).toEqual([708, 982]);
+      expect(result.level.start).toEqual([86, 592]);
+      expect(result.level.goal).toEqual([1411, 599]);
     }
   });
 
@@ -42,13 +51,13 @@ describe("validateLevel", () => {
       issues[`level-${i + 1}`] = goalPlacementIssues(result.level);
       return result.level;
     });
-    // Level-2's east is genuinely sealed, so the assembler moved its goal to
-    // the farthest reachable open spot (197px clears the 154px floor) with an
-    // honest closer-note instead of shipping an unreachable goal.
+    // Level-3's goal sits on the planter tops with its trigger box
+    // grazing them by ~10px; the bot wins through it (11 s, 10 jumps),
+    // so the flag is disclosed here rather than hidden.
     expect(issues).toEqual({
       "level-1": [],
-      "level-2": ["goal 197px from the start, under 40% of the level width"],
-      "level-3": [],
+      "level-2": [],
+      "level-3": ["goal trigger box or headroom is blocked"],
     });
     // Every shipped example is bot-won and flood-open.
     expect(goalReachableByFlood(levels[0])).toBe(true);
