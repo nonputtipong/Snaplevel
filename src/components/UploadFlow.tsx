@@ -135,7 +135,7 @@ export default function UploadFlow({
         <button
           type="button"
           onClick={reset}
-          className="rounded-full bg-slate-100 px-5 py-2 font-medium text-slate-950 hover:bg-white"
+          className="touch-manipulation rounded-full bg-slate-100 px-5 py-2 font-medium text-slate-950 hover:bg-white"
         >
           Try again
         </button>
@@ -197,7 +197,7 @@ export default function UploadFlow({
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        className="rounded-full bg-slate-100 px-8 py-4 text-lg font-semibold text-slate-950 hover:bg-white"
+        className="touch-manipulation rounded-full bg-slate-100 px-8 py-4 text-lg font-semibold text-slate-950 hover:bg-white"
       >
         Upload or take a photo
       </button>
@@ -205,7 +205,7 @@ export default function UploadFlow({
         <button
           type="button"
           onClick={() => void onSample()}
-          className="text-sm text-slate-300 underline underline-offset-4 hover:text-white"
+          className="touch-manipulation text-sm text-slate-300 underline underline-offset-4 hover:text-white"
         >
           Try a sample photo
         </button>

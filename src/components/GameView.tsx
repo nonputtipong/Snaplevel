@@ -11,7 +11,7 @@ import ChainPanel from "./ChainPanel";
 import TouchControls from "./TouchControls";
 
 const HUD_BUTTON =
-  "rounded-full bg-slate-800/80 px-3 py-1.5 text-sm text-slate-100 select-none hover:bg-slate-700 active:bg-slate-600";
+  "inline-flex min-h-[44px] touch-manipulation items-center justify-center rounded-full bg-slate-800/80 px-3 py-1.5 text-sm text-slate-100 select-none hover:bg-slate-700 active:bg-slate-600";
 
 export default function GameView({ level }: { level: Level }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -58,7 +58,10 @@ export default function GameView({ level }: { level: Level }) {
   };
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-2">
+    <div
+      className="flex min-h-0 w-full flex-1 flex-col items-center gap-2 select-none [-webkit-user-select:none] [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
+      onContextMenu={(event) => event.preventDefault()}
+    >
       <div className="flex w-full flex-wrap items-center justify-center gap-2">
         <button
           type="button"

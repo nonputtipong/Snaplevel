@@ -28,12 +28,12 @@ export default async function PlayPage({
     <main className="flex h-dvh flex-col items-center gap-2 overflow-hidden bg-slate-950 px-4 py-3 text-slate-100">
       <div className="flex w-full max-w-5xl items-center justify-between">
         <h1 className="text-lg font-semibold">Snaplevel</h1>
-        <nav className="flex gap-3 text-sm">
+        <nav className="flex touch-manipulation items-center gap-3 text-sm select-none [-webkit-touch-callout:none]">
           {[0, 1, 2].map((n) => (
             <Link
               key={n}
               href={`/play?fixture=${n}`}
-              className={`rounded-full px-3 py-1 ${
+              className={`inline-flex min-h-[44px] touch-manipulation items-center rounded-full px-3 py-1 ${
                 n === index
                   ? "bg-slate-100 font-medium text-slate-950"
                   : "text-slate-300 hover:bg-slate-800"
