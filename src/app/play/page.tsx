@@ -33,7 +33,7 @@ export default async function PlayPage({
             <Link
               key={n}
               href={`/play?fixture=${n}`}
-              className={`inline-flex min-h-[44px] touch-manipulation items-center rounded-full px-3 py-1 ${
+              className={`inline-flex min-h-[44px] touch-manipulation items-center rounded-full px-3 py-1 whitespace-nowrap ${
                 n === index
                   ? "bg-slate-100 font-medium text-slate-950"
                   : "text-slate-300 hover:bg-slate-800"
