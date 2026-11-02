@@ -57,7 +57,7 @@ export default function GameView({ level }: { level: Level }) {
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-2">
-      <div className="flex flex-wrap items-center justify-center gap-2">
+      <div className="flex w-full flex-wrap items-center justify-center gap-2">
         <button
           type="button"
           onClick={playAgain}
@@ -123,7 +123,7 @@ export default function GameView({ level }: { level: Level }) {
         </div>
       )}
       <TouchControls onRestart={playAgain} />
-      <p className="hidden text-xs text-slate-500 [@media(pointer:fine)]:block">
+      <p className="hidden w-full text-center text-xs text-slate-500 [@media(pointer:fine)]:block">
         ← → / A move · Space / W jump · R restart · D outlines
       </p>
       {level.hint && <p className="text-sm text-amber-200">{level.hint}</p>}
