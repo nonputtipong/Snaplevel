@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { validateLevel } from "./level";
-import { goalPlacementIssues } from "./pipeline/assemble";
+import { goalPlacementIssues, goalReachableByFlood } from "./pipeline/assemble";
 import level1 from "../../fixtures/level-1.json";
 import level2 from "../../fixtures/level-2.json";
 import level3 from "../../fixtures/level-3.json";
@@ -26,14 +26,28 @@ describe("validateLevel", () => {
 
   test("fixtures have well-placed goals", () => {
     const issues: Record<string, string[]> = {};
-    [level1, level2, level3].forEach((raw, i) => {
+    const levels = [level1, level2, level3].map((raw, i) => {
       const result = validateLevel(raw);
       expect(result.ok).toBe(true);
-      if (result.ok) {
-        issues[`level-${i + 1}`] = goalPlacementIssues(result.level);
+      if (!result.ok) {
+        throw new Error(`level-${i + 1} invalid`);
       }
+      issues[`level-${i + 1}`] = goalPlacementIssues(result.level);
+      return result.level;
     });
-    expect(issues).toEqual({ "level-1": [], "level-2": [], "level-3": [] });
+    // Level-3's east is genuinely sealed, so the assembler moved its goal to
+    // the farthest reachable open spot (197px clears the 154px floor) with an
+    // honest closer-note instead of shipping an unreachable goal.
+    expect(issues).toEqual({
+      "level-1": [],
+      "level-2": [],
+      "level-3": ["goal 197px from the start, under 40% of the level width"],
+    });
+    // Bot-won fixtures must be flood-open. Level-2 keeps its legacy sealed
+    // goal until a new photo replaces HomeDesk; flip this when it ships won.
+    expect(goalReachableByFlood(levels[0])).toBe(true);
+    expect(goalReachableByFlood(levels[1])).toBe(false);
+    expect(goalReachableByFlood(levels[2])).toBe(true);
   });
 
   test("accepts the empty fixture", () => {

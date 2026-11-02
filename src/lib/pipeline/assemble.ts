@@ -213,15 +213,12 @@ function pickStart(
 const FLOOD_CELL = 8;
 const GEN_NOTE = "Added a generated platform so the goal stays clear of the start.";
 
-function cellKey(x: number, y: number, cols: number): number {
-  return Math.floor(y / FLOOD_CELL) * cols + Math.floor(x / FLOOD_CELL);
-}
-
 /**
  * Whether any flooded cell overlaps the rect. A single containing cell is
  * not robust: a slot sitting exactly ph/2 above its surface lands in a
  * cell whose center dips into the erosion band. The body rect spans
- * several cells, so overlap is the grid-robust occupancy test.
+ * several cells, so overlap is the grid-robust occupancy test. Indices are
+ * clamped: a rect past the level edge must not alias the far edge.
  */
 function rectTouchesFlood(
   x1: number,
@@ -230,13 +227,14 @@ function rectTouchesFlood(
   y2: number,
   flooded: Set<number>,
   cols: number,
+  rows: number,
 ): boolean {
-  for (let iy = Math.floor(y1 / FLOOD_CELL); iy <= Math.floor(y2 / FLOOD_CELL); iy++) {
-    for (
-      let ix = Math.floor(x1 / FLOOD_CELL);
-      ix <= Math.floor(x2 / FLOOD_CELL);
-      ix++
-    ) {
+  const ix0 = Math.max(0, Math.floor(x1 / FLOOD_CELL));
+  const ix1 = Math.min(cols - 1, Math.floor(x2 / FLOOD_CELL));
+  const iy0 = Math.max(0, Math.floor(y1 / FLOOD_CELL));
+  const iy1 = Math.min(rows - 1, Math.floor(y2 / FLOOD_CELL));
+  for (let iy = iy0; iy <= iy1; iy++) {
+    for (let ix = ix0; ix <= ix1; ix++) {
       if (flooded.has(iy * cols + ix)) {
         return true;
       }
@@ -310,17 +308,16 @@ function floodFrom(
 interface GoalSpot {
   point: Point;
   platform: Platform;
-  moved: boolean;
+  index: number;
 }
 
 /**
- * First clear slot at least minDist from the start: platforms farthest
+ * Every clear slot at least minDist from the start: platforms farthest
  * first by midpoint, slots midpoint-out within each part, restricted to
  * flood-reached airspace (the standing body must overlap a flooded cell).
- * Null when no platform qualifies; the caller decides what a miss means
- * (next pass, generation, or fallback).
+ * Ordered best-first; the caller acceptance-tests each in order.
  */
-function pickGoal(
+function goalSpots(
   platforms: Platform[],
   exclude: Platform | null,
   parts: Point[][],
@@ -329,16 +326,18 @@ function pickGoal(
   height: number,
   flooded: Set<number>,
   minDist: number,
-): GoalSpot | null {
+): GoalSpot[] {
   const gr = Math.min(width, height) * 0.024;
   const { pw, ph } = playerSize(width, height);
   const cols = Math.ceil(width / FLOOD_CELL);
+  const rows = Math.ceil(height / FLOOD_CELL);
   const mid = (p: Platform): number => (p.box[0] + p.box[2]) / 2;
   const ordered = [...platforms]
     .filter((p) => p !== exclude)
     .sort((a, b) => Math.abs(mid(b) - startX) - Math.abs(mid(a) - startX));
   // Midpoint first, then outward: the goal stays centered when it can.
   const slots = [4, 3, 5, 2, 6, 1, 7, 0, 8];
+  const found: GoalSpot[] = [];
   for (const [index, platform] of ordered.entries()) {
     for (const part of platform.object.parts) {
       const [x1, , x2] = bbox([part]);
@@ -372,19 +371,19 @@ function pickGoal(
           continue;
         }
         if (
-          !rectTouchesFlood(x - pw / 2, topY - ph, x + pw / 2, topY, flooded, cols)
+          !rectTouchesFlood(x - pw / 2, topY - ph, x + pw / 2, topY, flooded, cols, rows)
         ) {
           continue;
         }
-        return {
+        found.push({
           point: [Math.round(x), Math.round(y)],
           platform,
-          moved: index > 0,
-        };
+          index,
+        });
       }
     }
   }
-  return null;
+  return found;
 }
 
 /**
@@ -586,12 +585,20 @@ export function assembleLevel(input: AssembleInput): AssembleResult {
   // goal spot first. Both must pass.
   let flooded = floodFrom(start, blockingParts, width, height);
   const floor = Math.max(width * 0.2, 150);
+  // A spot wins only if the validator itself (rounded coords, same flood)
+  // agrees it is reached: exact-value checks admit razor-thin passages
+  // that rounding then seals, so acceptance keeps the two consistent.
+  const accept = (point: Point): boolean =>
+    goalReachableByFlood(
+      { width, height, image: "", objects, start, goal: point },
+      flooded,
+    );
   const spot = (
     plats: Platform[],
     exclude: Platform | null,
     minDist: number,
-  ): GoalSpot | null =>
-    pickGoal(
+  ): { point: Point; platform: Platform; moved: boolean } | null => {
+    const spots = goalSpots(
       plats,
       exclude,
       blockingParts,
@@ -601,6 +608,13 @@ export function assembleLevel(input: AssembleInput): AssembleResult {
       flooded,
       minDist,
     );
+    for (const s of spots) {
+      if (accept(s.point)) {
+        return { point: s.point, platform: s.platform, moved: s.index > 0 };
+      }
+    }
+    return null;
+  };
   let stepCounter = 0;
   const placeGeneratedStep = (boxReached: Platform[]): Platform => {
     const spec = generationSpec(
@@ -635,7 +649,9 @@ export function assembleLevel(input: AssembleInput): AssembleResult {
   };
   // Goal on the generated step if it qualifies, else the farthest viable
   // spot anywhere (pocket best-effort), else the floor fallback.
-  const pickOnStep = (step: Platform): GoalSpot | null =>
+  const pickOnStep = (
+    step: Platform,
+  ): { point: Point; platform: Platform; moved: boolean } | null =>
     spot([step], null, width * 0.4) ??
     spot([step], null, floor) ??
     spot(platforms, null, 0);
@@ -665,6 +681,7 @@ export function assembleLevel(input: AssembleInput): AssembleResult {
     } else {
       goal = [width - 60, height - 60];
       host = null;
+      notes.push("Could not place a reachable goal.");
     }
   }
   closerCheck(goal);
@@ -712,6 +729,7 @@ export function assembleLevel(input: AssembleInput): AssembleResult {
           } else {
             goal = [width - 60, height - 60];
             host = null;
+            notes.push("Could not place a reachable goal.");
           }
         }
         closerCheck(goal);
@@ -769,24 +787,27 @@ export function goalPlacementIssues(level: Level): string[] {
 /**
  * Whether the goal is flood-reachable from the start (sweep/export-time
  * seal check): same grid, erosion, and seed as the assembler; the standing
- * body below the goal must overlap flooded airspace.
+ * body below the goal must overlap flooded airspace. Accepts a precomputed
+ * flood so the assembler can acceptance-test each candidate cheaply.
  */
-export function goalReachableByFlood(level: Level): boolean {
+export function goalReachableByFlood(level: Level, flooded?: Set<number>): boolean {
   const { width, height, start, goal } = level;
   const parts = level.objects
     .filter((o) => o.role !== "decor")
     .flatMap((o) => o.parts);
-  const flooded = floodFrom(start, parts, width, height);
+  const flood = flooded ?? floodFrom(start, parts, width, height);
   const gr = Math.min(width, height) * 0.024;
   const { pw, ph } = playerSize(width, height);
   const cols = Math.ceil(width / FLOOD_CELL);
+  const rows = Math.ceil(height / FLOOD_CELL);
   const topY = goal[1] + gr;
   return rectTouchesFlood(
     goal[0] - pw / 2,
     topY - ph,
     goal[0] + pw / 2,
     topY,
-    flooded,
+    flood,
     cols,
+    rows,
   );
 }

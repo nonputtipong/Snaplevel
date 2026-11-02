@@ -500,6 +500,45 @@ test("sealed pocket generates honestly below the floor", () => {
   ]);
 });
 
+test("fully blocked level reports it could not place a goal", () => {
+  const lidA: Point[] = [
+    [0, 220],
+    [120, 220],
+    [120, 280],
+    [0, 280],
+  ];
+  const lidGround: Point[] = [
+    [0, 400],
+    [1000, 400],
+    [1000, 460],
+    [0, 460],
+  ];
+  const slab: Point[] = [
+    [0, 340],
+    [1000, 340],
+    [1000, 375],
+    [0, 375],
+  ];
+  const { level, notes } = assembleLevel({
+    ...BASE,
+    objects: [
+      obj("a", [square(10, 300, 100)], "platform", 5000),
+      obj("lidA", [lidA], "hazard", 100),
+      obj("lid", [lidGround], "hazard", 60000),
+      obj("slab", [slab], "bouncy", 20000),
+    ],
+  });
+  // Every slot is blocked and the flood is seed-only: the floor fallback
+  // ships with a loud note instead of pretending the goal is reachable.
+  expect(level.goal).toEqual([940, 440]);
+  expect(notes).toEqual([
+    "Promoted lid to platform.",
+    "Added a ground floor.",
+    "Added a generated platform so the goal stays clear of the start.",
+    "Could not place a reachable goal.",
+  ]);
+});
+
 test("goalReachableByFlood splits sealed from open levels", () => {
   const floor: Point[] = [
     [0, 476],
@@ -528,6 +567,37 @@ test("goalReachableByFlood splits sealed from open levels", () => {
   });
   expect(goalReachableByFlood(make([floor, wall]))).toBe(false);
   expect(goalReachableByFlood(make([floor]))).toBe(true);
+});
+
+test("goal rect past the level edge does not wrap to the far edge", () => {
+  const floor: Point[] = [
+    [0, 476],
+    [1000, 476],
+    [1000, 500],
+    [0, 500],
+  ];
+  const wall: Point[] = [
+    [490, 0],
+    [510, 0],
+    [510, 476],
+    [490, 476],
+  ];
+  // Goal body rect extends past x=1000; unclamped grid indices alias the
+  // flooded west edge and report a sealed goal reachable (L3 false open).
+  const level: Level = {
+    ...BASE,
+    objects: [floor, wall].map((part, i) => ({
+      id: `obj-${i}`,
+      label: `o${i}`,
+      phrase: `o${i}`,
+      role: "platform" as Role,
+      reason: "r",
+      parts: [part],
+    })),
+    start: [56, 458],
+    goal: [990, 464],
+  };
+  expect(goalReachableByFlood(level)).toBe(false);
 });
 
 test("dropContainedParts keeps disjoint parts and drops holes", () => {
