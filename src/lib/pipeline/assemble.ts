@@ -477,6 +477,15 @@ function rectPart(x1: number, y1: number, x2: number, y2: number): Point[] {
   ];
 }
 
+function sameRect(a: Point[], b: Point[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((p, i) => p[0] === b[i][0] && p[1] === b[i][1])
+  );
+}
+
+const BRIDGE_NOTE = "Added a stepping platform to bridge a gap.";
+
 export function assembleLevel(input: AssembleInput): AssembleResult {
   const { width, height } = input;
   const notes: string[] = [];
@@ -569,7 +578,8 @@ export function assembleLevel(input: AssembleInput): AssembleResult {
     .flatMap((o) => o.parts);
 
   const picked = pickStart(platforms, allParts, width, height);
-  const start = picked.point;
+  // The simplified-layout fallback moves the start onto its strip.
+  let start = picked.point;
 
   const startBox =
     picked.platform ??
@@ -647,6 +657,57 @@ export function assembleLevel(input: AssembleInput): AssembleResult {
     notes.push(GEN_NOTE);
     return plat;
   };
+  // Last resort: a full-width bottom strip with the start at one end and
+  // the goal at the other. Every strip-top cell along the run must flood
+  // open; a photo object reaching the bottom edge blocks it and the level
+  // stays degenerate. Speculative generated steps targeted the failed
+  // goal, so they are dropped (photo objects stay): a step under a low
+  // lid would seal the corridor the fallback promises.
+  const simplifiedFallback = (): Point | null => {
+    const { ph } = playerSize(width, height);
+    const gr = Math.min(width, height) * 0.024;
+    const stripTop = height - 24;
+    const strip: LevelObject = {
+      id: "simplified-ground",
+      label: "simplified ground",
+      phrase: "simplified ground",
+      role: "platform",
+      reason: "Generated so a blocked level stays winnable.",
+      parts: [rectPart(0, stripTop, width, height)],
+    };
+    const kept = objects.filter(
+      (o) => o.id !== "reach-step" && !o.id.startsWith("goal-step"),
+    );
+    const parts = kept
+      .filter((o) => o.role !== "decor")
+      .flatMap((o) => o.parts);
+    const seed: Point = [60, stripTop - ph / 2];
+    const flood = floodFrom(seed, [...parts, ...strip.parts], width, height);
+    const cols = Math.ceil(width / FLOOD_CELL);
+    const iy = Math.floor(seed[1] / FLOOD_CELL);
+    for (
+      let ix = Math.floor(seed[0] / FLOOD_CELL);
+      ix <= Math.floor((width - 60) / FLOOD_CELL);
+      ix++
+    ) {
+      if (!flood.has(iy * cols + ix)) {
+        return null;
+      }
+    }
+    const dupe = kept.some((o) =>
+      o.parts.some((p) => sameRect(p, strip.parts[0])),
+    );
+    objects.length = 0;
+    objects.push(...kept, ...(dupe ? [] : [strip]));
+    for (let i = notes.length - 1; i >= 0; i--) {
+      if (notes[i] === GEN_NOTE || notes[i] === BRIDGE_NOTE) {
+        notes.splice(i, 1);
+      }
+    }
+    flooded = flood;
+    start = [Math.round(seed[0]), Math.round(seed[1])];
+    return [width - 60, Math.round(stripTop - gr)];
+  };
   // Goal on the generated step if it qualifies, else the farthest viable
   // spot anywhere (pocket best-effort), else the floor fallback.
   const pickOnStep = (
@@ -679,9 +740,17 @@ export function assembleLevel(input: AssembleInput): AssembleResult {
       goal = repick.point;
       host = repick.platform;
     } else {
-      goal = [width - 60, height - 60];
-      host = null;
-      notes.push("Could not place a reachable goal.");
+      const simple = simplifiedFallback();
+      if (simple) {
+        goal = simple;
+        host = null;
+        notes.push("Simplified layout.");
+      } else {
+        goal = [width - 60, height - 60];
+        host = null;
+        notes.push("Simplified layout is blocked.");
+        notes.push("Could not place a reachable goal.");
+      }
     }
   }
   closerCheck(goal);
@@ -710,7 +779,7 @@ export function assembleLevel(input: AssembleInput): AssembleResult {
       solidById.set(step.id, stepPlatform);
       blockingParts.push(...step.parts);
       flooded = floodFrom(start, blockingParts, width, height);
-      notes.push("Added a stepping platform to bridge a gap.");
+      notes.push(BRIDGE_NOTE);
       const reached = reachableSet(startSolid, solids, width, height);
       if (!reached.has(goalSolid)) {
         const nudge =
@@ -727,9 +796,17 @@ export function assembleLevel(input: AssembleInput): AssembleResult {
             goal = repick2.point;
             host = repick2.platform;
           } else {
-            goal = [width - 60, height - 60];
-            host = null;
-            notes.push("Could not place a reachable goal.");
+            const simple = simplifiedFallback();
+            if (simple) {
+              goal = simple;
+              host = null;
+              notes.push("Simplified layout.");
+            } else {
+              goal = [width - 60, height - 60];
+              host = null;
+              notes.push("Simplified layout is blocked.");
+              notes.push("Could not place a reachable goal.");
+            }
           }
         }
         closerCheck(goal);

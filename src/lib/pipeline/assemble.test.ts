@@ -528,15 +528,110 @@ test("fully blocked level reports it could not place a goal", () => {
       obj("slab", [slab], "bouncy", 20000),
     ],
   });
-  // Every slot is blocked and the flood is seed-only: the floor fallback
-  // ships with a loud note instead of pretending the goal is reachable.
+  // Every slot is blocked and the flood is seed-only; the full-width lid
+  // also seals the simplified strip, so the fallback reports the blockage
+  // and keeps the degenerate note instead of claiming a winnable level.
   expect(level.goal).toEqual([940, 440]);
   expect(notes).toEqual([
     "Promoted lid to platform.",
     "Added a ground floor.",
     "Added a generated platform so the goal stays clear of the start.",
+    "Simplified layout is blocked.",
     "Could not place a reachable goal.",
   ]);
+});
+
+test("degenerate level falls back to a simplified strip layout", () => {
+  // Fully-blocked mechanics (seed-only flood, no accepted slot) but the
+  // lid stops 4px above the strip corridor, so the bottom strip runs.
+  const lidA: Point[] = [
+    [0, 220],
+    [120, 220],
+    [120, 280],
+    [0, 280],
+  ];
+  const lidGround: Point[] = [
+    [0, 400],
+    [1000, 400],
+    [1000, 444],
+    [0, 444],
+  ];
+  const slab: Point[] = [
+    [0, 340],
+    [1000, 340],
+    [1000, 375],
+    [0, 375],
+  ];
+  const { level, notes } = assembleLevel({
+    ...BASE,
+    objects: [
+      obj("a", [square(10, 300, 100)], "platform", 5000),
+      obj("lidA", [lidA], "hazard", 100),
+      obj("lid", [lidGround], "hazard", 60000),
+      obj("slab", [slab], "bouncy", 20000),
+    ],
+  });
+  expect(notes).toEqual([
+    "Promoted lid to platform.",
+    "Added a ground floor.",
+    "Simplified layout.",
+  ]);
+  expect(level.start).toEqual([60, 462]);
+  expect(level.goal).toEqual([940, 464]);
+  // The sparse ground floor already is the strip: reused, not duplicated;
+  // the speculative goal-step that targeted the failed goal is dropped.
+  expect(level.objects.some((o) => o.id === "simplified-ground")).toBe(false);
+  expect(level.objects.some((o) => o.id === "ground")).toBe(true);
+  expect(level.objects.some((o) => o.id.startsWith("goal-step"))).toBe(false);
+  expect(goalReachableByFlood(level)).toBe(true);
+});
+
+test("blocked strip reports instead of claiming success", () => {
+  // Same degenerate layout plus a full-height wall column crossing the
+  // strip: the fallback must report the blockage, add no strip, and keep
+  // the degenerate note instead of claiming a winnable level.
+  const lidA: Point[] = [
+    [0, 220],
+    [120, 220],
+    [120, 280],
+    [0, 280],
+  ];
+  const lidGround: Point[] = [
+    [0, 400],
+    [1000, 400],
+    [1000, 444],
+    [0, 444],
+  ];
+  const slab: Point[] = [
+    [0, 340],
+    [1000, 340],
+    [1000, 375],
+    [0, 375],
+  ];
+  const wall: Point[] = [
+    [490, 0],
+    [510, 0],
+    [510, 500],
+    [490, 500],
+  ];
+  const { level, notes } = assembleLevel({
+    ...BASE,
+    objects: [
+      obj("a", [square(10, 300, 100)], "platform", 5000),
+      obj("lidA", [lidA], "hazard", 100),
+      obj("lid", [lidGround], "hazard", 60000),
+      obj("slab", [slab], "bouncy", 20000),
+      obj("wall", [wall], "platform", 10000),
+    ],
+  });
+  expect(notes).toEqual([
+    "Added a ground floor.",
+    "Added a generated platform so the goal stays clear of the start.",
+    "Simplified layout is blocked.",
+    "Could not place a reachable goal.",
+  ]);
+  expect(level.objects.some((o) => o.id === "simplified-ground")).toBe(false);
+  expect(goalReachableByFlood(level)).toBe(false);
 });
 
 test("goalReachableByFlood splits sealed from open levels", () => {
