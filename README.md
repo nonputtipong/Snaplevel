@@ -40,3 +40,7 @@ See `docs/api-notes.md` for verified API behavior and measurements.
 ## Built during the hackathon
 
 (Empty — entries are added as features land.)
+
+## Photo credits
+
+Example photos by the author (own work, CC0).
