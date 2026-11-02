@@ -4,9 +4,8 @@ import GameViewLoader from "@/components/GameViewLoader";
 import { validateLevel } from "@/lib/level";
 import level1 from "../../../fixtures/level-1.json";
 import level2 from "../../../fixtures/level-2.json";
-import level3 from "../../../fixtures/level-3.json";
 
-const FIXTURES = [level1, level2, level3];
+const FIXTURES = [level1, level2];
 
 export default async function PlayPage({
   searchParams,
@@ -29,7 +28,7 @@ export default async function PlayPage({
       <div className="flex w-full max-w-5xl items-center justify-between">
         <h1 className="text-lg font-semibold">Snaplevel</h1>
         <nav className="flex gap-3 text-sm">
-          {[0, 1, 2].map((n) => (
+          {[0, 1].map((n) => (
             <Link
               key={n}
               href={`/play?fixture=${n}`}

@@ -21,14 +21,13 @@ import { toPolygons } from "@/lib/pipeline/toPolygons";
 import { assembleLevel } from "@/lib/pipeline/assemble";
 import level1 from "../../../../fixtures/level-1.json";
 import level2 from "../../../../fixtures/level-2.json";
-import level3 from "../../../../fixtures/level-3.json";
 import levelEmpty from "../../../../fixtures/level-empty.json";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const FIXTURES = [level1, level2, level3, levelEmpty];
+const FIXTURES = [level1, level2, levelEmpty];
 const DELAY_MS = 400;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

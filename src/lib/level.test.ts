@@ -3,7 +3,6 @@ import { validateLevel } from "./level";
 import { goalPlacementIssues, goalReachableByFlood } from "./pipeline/assemble";
 import level1 from "../../fixtures/level-1.json";
 import level2 from "../../fixtures/level-2.json";
-import level3 from "../../fixtures/level-3.json";
 import levelEmpty from "../../fixtures/level-empty.json";
 
 describe("validateLevel", () => {
@@ -11,12 +10,8 @@ describe("validateLevel", () => {
     expect(validateLevel(level1).ok).toBe(true);
   });
 
-  test("accepts fixture 2", () => {
-    expect(validateLevel(level2).ok).toBe(true);
-  });
-
-  test("accepts portrait fixture 3", () => {
-    const result = validateLevel(level3);
+  test("accepts portrait fixture 2", () => {
+    const result = validateLevel(level2);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.level.width).toBe(768);
@@ -26,7 +21,7 @@ describe("validateLevel", () => {
 
   test("fixtures have well-placed goals", () => {
     const issues: Record<string, string[]> = {};
-    const levels = [level1, level2, level3].map((raw, i) => {
+    const levels = [level1, level2].map((raw, i) => {
       const result = validateLevel(raw);
       expect(result.ok).toBe(true);
       if (!result.ok) {
@@ -35,19 +30,16 @@ describe("validateLevel", () => {
       issues[`level-${i + 1}`] = goalPlacementIssues(result.level);
       return result.level;
     });
-    // Level-3's east is genuinely sealed, so the assembler moved its goal to
+    // Level-2's east is genuinely sealed, so the assembler moved its goal to
     // the farthest reachable open spot (197px clears the 154px floor) with an
     // honest closer-note instead of shipping an unreachable goal.
     expect(issues).toEqual({
       "level-1": [],
-      "level-2": [],
-      "level-3": ["goal 197px from the start, under 40% of the level width"],
+      "level-2": ["goal 197px from the start, under 40% of the level width"],
     });
-    // Bot-won fixtures must be flood-open. Level-2 keeps its legacy sealed
-    // goal until a new photo replaces HomeDesk; flip this when it ships won.
+    // Every shipped example is bot-won and flood-open.
     expect(goalReachableByFlood(levels[0])).toBe(true);
-    expect(goalReachableByFlood(levels[1])).toBe(false);
-    expect(goalReachableByFlood(levels[2])).toBe(true);
+    expect(goalReachableByFlood(levels[1])).toBe(true);
   });
 
   test("accepts the empty fixture", () => {

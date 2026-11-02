@@ -3,12 +3,10 @@ import UploadFlow from "@/components/UploadFlow";
 import { validateLevel } from "@/lib/level";
 import level1 from "../../fixtures/level-1.json";
 import level2 from "../../fixtures/level-2.json";
-import level3 from "../../fixtures/level-3.json";
 
 const EXAMPLES = [
   { index: 0, title: "Work Desk 1", raw: level1 },
-  { index: 1, title: "Home Desk", raw: level2 },
-  { index: 2, title: "Work Desk 2", raw: level3 },
+  { index: 1, title: "Work Desk 2", raw: level2 },
 ];
 
 export default function Home() {
@@ -41,7 +39,7 @@ export default function Home() {
 
       <div className="flex w-full max-w-4xl flex-col gap-4">
         <h2 className="text-xl font-semibold">Play an example level</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {examples.map(({ index, title, level }) => (
             <Link
               key={index}
