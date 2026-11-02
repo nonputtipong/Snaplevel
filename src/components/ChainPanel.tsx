@@ -3,6 +3,7 @@
 import type { Level, LevelObject } from "@/lib/level";
 import { roleToBodyOptions } from "@/game/roles";
 import { cssColor, timingRows } from "@/lib/chainView";
+import { CloseIcon } from "./icons";
 
 function roleColor(object: LevelObject): string {
   return cssColor(roleToBodyOptions(object.role).debugColor);
@@ -53,9 +54,9 @@ export default function ChainPanel({
             type="button"
             onClick={onClose}
             aria-label="Close model chain"
-            className="inline-flex min-h-[44px] touch-manipulation items-center rounded-full bg-slate-800 px-3 py-1.5 text-sm text-slate-100 hover:bg-slate-700"
+            className="inline-flex min-h-[44px] touch-manipulation items-center gap-1.5 rounded-full bg-slate-800 px-3 py-1.5 text-sm text-slate-100 hover:bg-slate-700"
           >
-            ✕ Close
+            <CloseIcon size={16} /> Close
           </button>
         </div>
 

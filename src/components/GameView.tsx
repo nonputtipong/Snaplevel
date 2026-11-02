@@ -9,9 +9,18 @@ import { GRAVITY_Y } from "@/game/physics";
 import { isSfxEnabled, setSfxEnabled } from "@/game/sfx";
 import ChainPanel from "./ChainPanel";
 import TouchControls from "./TouchControls";
+import {
+  ChainIcon,
+  OutlinesIcon,
+  PlusIcon,
+  RestartIcon,
+  SoundOffIcon,
+  SoundOnIcon,
+  TrophyIcon,
+} from "./icons";
 
 const HUD_BUTTON =
-  "inline-flex min-h-[44px] touch-manipulation items-center justify-center rounded-full bg-slate-800/80 px-3 py-1.5 text-sm text-slate-100 select-none hover:bg-slate-700 active:bg-slate-600";
+  "inline-flex min-h-[44px] touch-manipulation items-center justify-center gap-1.5 rounded-full bg-slate-800/80 px-3 py-1.5 text-sm text-slate-100 transition-colors select-none hover:bg-slate-700 active:bg-slate-600";
 
 export default function GameView({ level }: { level: Level }) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -70,7 +79,7 @@ export default function GameView({ level }: { level: Level }) {
           aria-label="Restart level"
           className={HUD_BUTTON}
         >
-          ⟳ Restart
+          <RestartIcon /> Restart
         </button>
         <Link
           href="/"
@@ -78,7 +87,7 @@ export default function GameView({ level }: { level: Level }) {
           aria-label="New photo"
           className={HUD_BUTTON}
         >
-          ＋ New photo
+          <PlusIcon /> New photo
         </Link>
         <button
           type="button"
@@ -87,7 +96,7 @@ export default function GameView({ level }: { level: Level }) {
           aria-label="Toggle outlines"
           className={HUD_BUTTON}
         >
-          ◇ Outlines
+          <OutlinesIcon /> Outlines
         </button>
         <button
           type="button"
@@ -97,7 +106,7 @@ export default function GameView({ level }: { level: Level }) {
           aria-pressed={showChain}
           className={HUD_BUTTON}
         >
-          ⛓ Chain
+          <ChainIcon /> Chain
         </button>
         <button
           type="button"
@@ -107,14 +116,16 @@ export default function GameView({ level }: { level: Level }) {
           aria-pressed={soundOn}
           className={HUD_BUTTON}
         >
-          {soundOn ? "🔊 Sound" : "🔇 Sound"}
+          {soundOn ? <SoundOnIcon /> : <SoundOffIcon />} Sound
         </button>
       </div>
       <div ref={hostRef} className="relative flex min-h-0 w-full flex-1 touch-none items-center justify-center select-none [&>canvas]:rounded-lg" />
       {won && (
         <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/60 px-4">
           <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-2xl border border-emerald-500/30 bg-slate-900 px-8 py-8 text-center shadow-xl">
-            <p className="text-4xl">🏆</p>
+            <p className="text-teal-400">
+              <TrophyIcon size={44} />
+            </p>
             <p className="text-2xl font-bold text-slate-100">You win!</p>
             <p className="text-sm text-slate-400">
               Snap another photo to play a new level.

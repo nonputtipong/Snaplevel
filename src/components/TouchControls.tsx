@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { JumpIcon, LeftIcon, RestartIcon, RightIcon } from "./icons";
 import {
   holdDown,
   holdJump,
@@ -96,7 +97,7 @@ export default function TouchControls({ onRestart }: { onRestart: () => void }) 
           className={`${BUTTON} ${pressed.left ? PRESSED : ""}`}
           {...hold("left")}
         >
-          ◀
+          <LeftIcon size={30} />
         </button>
         <button
           type="button"
@@ -104,7 +105,7 @@ export default function TouchControls({ onRestart }: { onRestart: () => void }) 
           className={`${BUTTON} ${pressed.right ? PRESSED : ""}`}
           {...hold("right")}
         >
-          ▶
+          <RightIcon size={30} />
         </button>
       </div>
       <div className="flex items-center gap-3">
@@ -118,7 +119,7 @@ export default function TouchControls({ onRestart }: { onRestart: () => void }) 
           onPointerLeave={() => set("restart", false)}
           className={`flex h-12 w-12 touch-none items-center justify-center rounded-full bg-slate-800/80 text-xl text-slate-100 transition-transform duration-75 select-none active:bg-slate-600 [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] ${pressed.restart ? PRESSED : ""}`}
         >
-          ⟳
+          <RestartIcon size={22} />
         </button>
         <button
           type="button"
@@ -143,7 +144,7 @@ export default function TouchControls({ onRestart }: { onRestart: () => void }) 
             set("jump", false);
           }}
         >
-          ▲
+          <JumpIcon size={34} />
         </button>
       </div>
     </div>

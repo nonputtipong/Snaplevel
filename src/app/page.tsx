@@ -1,5 +1,6 @@
 import Link from "next/link";
 import UploadFlow from "@/components/UploadFlow";
+import { CameraIcon } from "@/components/icons";
 import { validateLevel } from "@/lib/level";
 import level1 from "../../fixtures/level-1.json";
 import level2 from "../../fixtures/level-2.json";
@@ -20,7 +21,9 @@ export default function Home() {
   return (
     <main className="flex min-h-dvh flex-col items-center gap-8 bg-gradient-to-b from-slate-950 via-slate-950 to-emerald-950/40 px-4 py-10 text-slate-100 sm:gap-10">
       <div className="flex max-w-2xl flex-col items-center gap-3 text-center sm:gap-4">
-        <p className="text-5xl">📸</p>
+        <p className="text-teal-400">
+          <CameraIcon size={56} />
+        </p>
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
           Snaplevel
         </h1>
