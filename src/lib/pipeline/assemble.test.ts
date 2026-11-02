@@ -4,9 +4,11 @@ import {
   assembleLevel,
   dropContainedParts,
   dropUnviableParts,
+  goalPlacementIssues,
+  goalReachableByFlood,
   type AssembledObject,
 } from "./assemble";
-import type { Point, Role } from "../level";
+import type { Level, Point, Role } from "../level";
 import { toPolygons } from "./toPolygons";
 import basketJson from "../../../fixtures/mask-fruit-basket.json";
 import benchJson from "../../../fixtures/mask-park-bench.json";
@@ -75,15 +77,18 @@ test("promotes the largest object when platforms drop below two", () => {
     ["e", "platform"],
     ["f", "bouncy"],
     ["ground", "platform"],
+    ["stepping platform", "platform"],
   ]);
   expect(notes).toEqual([
     "Promoted e to platform.",
     "Added a ground floor.",
+    "Added a generated platform so the goal stays clear of the start.",
   ]);
   expect(level.hint).toBeUndefined();
   expect(level.start).toEqual([167, 458]);
-  // Goal targets platforms only: e (max-x 150) beats a, f is bouncy.
-  expect(level.goal).toEqual([125, 408]);
+  // Step 22 contract: nothing standing meets the 200px floor (e is 42px
+  // away), so a step generates at the far flooded edge instead.
+  expect(level.goal).toEqual([910, 446]);
 });
 
 test("unreachable goal gains a step and a nudge with notes", () => {
@@ -98,12 +103,15 @@ test("unreachable goal gains a step and a nudge with notes", () => {
   const ids = level.objects.map((o) => o.id);
   expect(ids).not.toContain("ground");
   expect(ids).toContain("reach-step");
+  expect(ids).toContain("goal-step");
   // The 240px a→c gap beats the ~190px derived limit; the mid-way step still
-  // strands the goal, so it lands back on the start platform top.
-  expect(level.goal).toEqual([60, 288]);
+  // strands the goal. Step 22 contract: the nudge backstop also honors the
+  // 200px floor, so a step generates beside the start instead of reusing it.
+  expect(level.goal).toEqual([292, 270]);
   expect(notes).toEqual([
     "Added a stepping platform to bridge a gap.",
-    "Moved the goal onto a reachable platform.",
+    "Added a generated platform so the goal stays clear of the start.",
+    "Goal closer than 40% of the level width.",
   ]);
 });
 
@@ -152,6 +160,156 @@ test("blocked headroom skips to the next platform", () => {
   expect(level.start).toEqual([167, 282]);
 });
 
+test("goal inside a solid moves to a clear spot", () => {
+  const { level, notes } = assembleLevel({
+    ...BASE,
+    objects: [
+      obj("a", [square(10, 300, 100)], "platform", 5000),
+      obj("c", [square(150, 300, 100)], "platform", 4000),
+      obj("d", [square(300, 300, 100)], "platform", 3000),
+      obj(
+        "lid",
+        [
+          [
+            [300, 220],
+            [400, 220],
+            [400, 280],
+            [300, 280],
+          ],
+        ],
+        "hazard",
+        100,
+      ),
+    ],
+  });
+  // d's whole top is buried in lid; the goal must leave d for c.
+  // (The lid is a hazard: lethal zones block the goal just like solids.
+  // c's edge slot wins: its center misses the 200px floor.)
+  expect(level.goal).toEqual([233, 288]);
+  expect(notes).toContain("Moved the goal to an open spot.");
+});
+
+test("roofed goal top moves to the next platform", () => {
+  const { level, notes } = assembleLevel({
+    ...BASE,
+    objects: [
+      obj("a", [square(10, 300, 100)], "platform", 5000),
+      obj("c", [square(150, 300, 100)], "platform", 4000),
+      obj("d", [square(300, 300, 100)], "platform", 3000),
+      obj(
+        "roof",
+        [
+          [
+            [300, 260],
+            [400, 260],
+            [400, 274],
+            [300, 274],
+          ],
+        ],
+        "bouncy",
+        100,
+      ),
+    ],
+  });
+  // d's trigger box is clear but every slot's headroom is roofed; goal leaves d.
+  // (c's edge slot: its center misses the 200px floor.)
+  expect(level.goal).toEqual([233, 288]);
+  expect(notes).toContain("Moved the goal to an open spot.");
+});
+
+test("clustered goal gains a distance note", () => {
+  const { level, notes } = assembleLevel({
+    ...BASE,
+    objects: [
+      obj("a", [square(10, 300, 100)], "platform", 5000),
+      obj("c", [square(150, 300, 100)], "platform", 4000),
+      obj("d", [square(300, 300, 100)], "platform", 3000),
+    ],
+  });
+  // Nothing is 40% of the width from the start; rightmost stands, flagged.
+  expect(level.goal).toEqual([350, 288]);
+  expect(notes).toEqual(["Goal closer than 40% of the level width."]);
+});
+
+test("goal prefers a far clear top over a near one", () => {
+  const { level, notes } = assembleLevel({
+    ...BASE,
+    objects: [
+      obj("a", [square(10, 300, 100)], "platform", 5000),
+      obj("m", [square(400, 300, 50)], "platform", 3000),
+      {
+        label: "w",
+        phrase: "w",
+        reason: "w reason",
+        role: "platform",
+        area: 4000,
+        polygons: [square(250, 300, 42), square(700, 300, 67)],
+      },
+    ],
+  });
+  // Near part0 is free but clustered; the far part1 top must win instead.
+  expect(level.goal).toEqual([734, 288]);
+  expect(notes).toEqual([]);
+});
+
+test("goal ignores decor overhead", () => {
+  const { level, notes } = assembleLevel({
+    ...BASE,
+    objects: [
+      obj("a", [square(10, 300, 100)], "platform", 5000),
+      obj("d", [square(700, 420, 100)], "platform", 4000),
+      obj(
+        "painting",
+        [
+          [
+            [700, 340],
+            [800, 340],
+            [800, 400],
+            [700, 400],
+          ],
+        ],
+        "decor",
+        100,
+      ),
+    ],
+  });
+  // Decor has no bodies in the scene, so it never blocks the win zone.
+  expect(level.goal).toEqual([750, 408]);
+  expect(notes).toEqual(["Added a ground floor."]);
+});
+
+test("relocated goal checks its host, not the rightmost box", () => {
+  const { level, notes } = assembleLevel({
+    ...BASE,
+    objects: [
+      obj("a", [square(10, 300, 100)], "platform", 5000),
+      obj("c", [square(150, 300, 100)], "platform", 4000),
+      obj("d", [square(700, 300, 100)], "platform", 3000),
+      obj(
+        "lid",
+        [
+          [
+            [700, 220],
+            [800, 220],
+            [800, 280],
+            [700, 280],
+          ],
+        ],
+        "bouncy",
+        100,
+      ),
+    ],
+  });
+  // Rightmost d is blocked and unreachable, but the goal relocates to c
+  // (host, one hop away), so no bridge may fire. c's edge slot meets the
+  // 200px floor where its center cannot.
+  expect(level.goal).toEqual([233, 288]);
+  expect(notes).toEqual([
+    "Moved the goal to an open spot.",
+    "Goal closer than 40% of the level width.",
+  ]);
+});
+
 test("fully roofed level falls back to the floor start", () => {
   const roof: Point[] = [
     [0, 0],
@@ -167,6 +325,209 @@ test("fully roofed level falls back to the floor start", () => {
     ],
   });
   expect(level.start).toEqual([100, 440]);
+});
+
+test("goalPlacementIssues passes a clean assembled level", () => {
+  const { level } = assembleLevel({
+    ...BASE,
+    objects: [
+      obj("a", [square(10, 300, 100)]),
+      obj("b", [square(200, 300, 100)], "bouncy"),
+      obj("c", [square(350, 300, 100)]),
+      obj("d", [square(500, 280, 100)]),
+    ],
+  });
+  expect(goalPlacementIssues(level)).toEqual([]);
+});
+
+test("goalPlacementIssues flags an embedded, clustered goal", () => {
+  const level: Level = {
+    ...BASE,
+    objects: [
+      {
+        id: "obj-0",
+        label: "d",
+        phrase: "d",
+        role: "platform",
+        reason: "r",
+        parts: [square(300, 300, 100)],
+      },
+      {
+        id: "obj-1",
+        label: "lid",
+        phrase: "lid",
+        role: "bouncy",
+        reason: "r",
+        parts: [square(330, 230, 60)],
+      },
+    ],
+    start: [27, 282],
+    goal: [350, 288],
+  };
+  expect(goalPlacementIssues(level)).toEqual([
+    "goal trigger box or headroom is blocked",
+    "goal 323px from the start, under 40% of the level width",
+  ]);
+});
+
+test("goalPlacementIssues flags a goal overlapping a hazard", () => {
+  const level: Level = {
+    ...BASE,
+    objects: [
+      {
+        id: "obj-0",
+        label: "d",
+        phrase: "d",
+        role: "platform",
+        reason: "r",
+        parts: [square(300, 300, 100)],
+      },
+      {
+        id: "obj-1",
+        label: "spikes",
+        phrase: "spikes",
+        role: "hazard",
+        reason: "r",
+        parts: [square(330, 230, 60)],
+      },
+    ],
+    start: [27, 282],
+    goal: [350, 288],
+  };
+  expect(goalPlacementIssues(level)).toEqual([
+    "goal trigger box or headroom is blocked",
+    "goal 323px from the start, under 40% of the level width",
+  ]);
+});
+
+test("goalPlacementIssues flags a clear but clustered goal", () => {
+  const { level } = assembleLevel({
+    ...BASE,
+    objects: [
+      obj("a", [square(10, 300, 100)], "platform", 5000),
+      obj("c", [square(150, 300, 100)], "platform", 4000),
+      obj("d", [square(300, 300, 100)], "platform", 3000),
+    ],
+  });
+  expect(goalPlacementIssues(level)).toEqual([
+    "goal 323px from the start, under 40% of the level width",
+  ]);
+});
+
+test("sealed wall generates a start-side goal step", () => {
+  const wall: Point[] = [
+    [490, 0],
+    [510, 0],
+    [510, 476],
+    [490, 476],
+  ];
+  const { level, notes } = assembleLevel({
+    ...BASE,
+    objects: [
+      obj("a", [square(10, 300, 100)], "platform", 5000),
+      obj("wall", [wall], "platform", 4000),
+      obj("d", [square(700, 300, 100)], "platform", 3000),
+    ],
+  });
+  // d is box-adjacent but flood-sealed behind the wall; a generated step
+  // keeps the goal on the start side instead of bridging nowhere.
+  expect(level.goal).toEqual([292, 286]);
+  expect(level.objects.map((o) => o.id)).toContain("goal-step");
+  expect(level.objects.map((o) => o.id)).not.toContain("reach-step");
+  expect(notes).toEqual([
+    "Added a generated platform so the goal stays clear of the start.",
+    "Goal closer than 40% of the level width.",
+  ]);
+});
+
+test("sub-player slit seals via erosion", () => {
+  const upper: Point[] = [
+    [490, 0],
+    [510, 0],
+    [510, 200],
+    [490, 200],
+  ];
+  const lower: Point[] = [
+    [490, 220],
+    [510, 220],
+    [510, 476],
+    [490, 476],
+  ];
+  const { level, notes } = assembleLevel({
+    ...BASE,
+    objects: [
+      obj("a", [square(10, 300, 100)], "platform", 5000),
+      obj("upper", [upper], "platform", 4000),
+      obj("lower", [lower], "platform", 3500),
+      obj("d", [square(700, 300, 100)], "platform", 3000),
+    ],
+  });
+  // The 20px hole fits a grid cell but not the 28px-tall player: erosion
+  // seals it, so the east side is unreachable and the goal generates west.
+  expect(level.goal).toEqual([292, 286]);
+  expect(level.objects.map((o) => o.id)).toContain("goal-step");
+  expect(level.objects.map((o) => o.id)).not.toContain("reach-step");
+  expect(notes).toEqual([
+    "Added a generated platform so the goal stays clear of the start.",
+    "Goal closer than 40% of the level width.",
+  ]);
+});
+
+test("sealed pocket generates honestly below the floor", () => {
+  const wall: Point[] = [
+    [200, 0],
+    [220, 0],
+    [220, 476],
+    [200, 476],
+  ];
+  const { level, notes } = assembleLevel({
+    ...BASE,
+    objects: [
+      obj("a", [square(10, 300, 100)], "platform", 5000),
+      obj("wall", [wall], "platform", 4000),
+      obj("d", [square(700, 300, 100)], "platform", 3000),
+    ],
+  });
+  // The pocket is narrower than the 200px floor: physics forbids the floor,
+  // so the goal lands at the far edge with both notes, never across.
+  expect(level.objects.map((o) => o.id)).toContain("goal-step");
+  expect(level.objects.map((o) => o.id)).not.toContain("reach-step");
+  expect(level.goal[0]).toBeLessThan(200);
+  expect(Math.abs(level.goal[0] - level.start[0])).toBeLessThan(200);
+  expect(notes).toEqual([
+    "Added a generated platform so the goal stays clear of the start.",
+    "Goal closer than 40% of the level width.",
+  ]);
+});
+
+test("goalReachableByFlood splits sealed from open levels", () => {
+  const floor: Point[] = [
+    [0, 476],
+    [1000, 476],
+    [1000, 500],
+    [0, 500],
+  ];
+  const wall: Point[] = [
+    [490, 0],
+    [510, 0],
+    [510, 476],
+    [490, 476],
+  ];
+  const make = (parts: Point[][]): Level => ({
+    ...BASE,
+    objects: parts.map((part, i) => ({
+      id: `obj-${i}`,
+      label: `o${i}`,
+      phrase: `o${i}`,
+      role: "platform" as Role,
+      reason: "r",
+      parts: [part],
+    })),
+    start: [56, 458],
+    goal: [944, 464],
+  });
+  expect(goalReachableByFlood(make([floor, wall]))).toBe(false);
+  expect(goalReachableByFlood(make([floor]))).toBe(true);
 });
 
 test("dropContainedParts keeps disjoint parts and drops holes", () => {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { validateLevel } from "./level";
+import { goalPlacementIssues } from "./pipeline/assemble";
 import level1 from "../../fixtures/level-1.json";
 import level2 from "../../fixtures/level-2.json";
 import level3 from "../../fixtures/level-3.json";
@@ -21,6 +22,18 @@ describe("validateLevel", () => {
       expect(result.level.width).toBe(768);
       expect(result.level.height).toBe(1024);
     }
+  });
+
+  test("fixtures have well-placed goals", () => {
+    const issues: Record<string, string[]> = {};
+    [level1, level2, level3].forEach((raw, i) => {
+      const result = validateLevel(raw);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        issues[`level-${i + 1}`] = goalPlacementIssues(result.level);
+      }
+    });
+    expect(issues).toEqual({ "level-1": [], "level-2": [], "level-3": [] });
   });
 
   test("accepts the empty fixture", () => {

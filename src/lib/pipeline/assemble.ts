@@ -210,6 +210,233 @@ function pickStart(
   return { point: [Math.round(width * 0.1), height - 60], platform: null };
 }
 
+const FLOOD_CELL = 8;
+const GEN_NOTE = "Added a generated platform so the goal stays clear of the start.";
+
+function cellKey(x: number, y: number, cols: number): number {
+  return Math.floor(y / FLOOD_CELL) * cols + Math.floor(x / FLOOD_CELL);
+}
+
+/**
+ * Whether any flooded cell overlaps the rect. A single containing cell is
+ * not robust: a slot sitting exactly ph/2 above its surface lands in a
+ * cell whose center dips into the erosion band. The body rect spans
+ * several cells, so overlap is the grid-robust occupancy test.
+ */
+function rectTouchesFlood(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  flooded: Set<number>,
+  cols: number,
+): boolean {
+  for (let iy = Math.floor(y1 / FLOOD_CELL); iy <= Math.floor(y2 / FLOOD_CELL); iy++) {
+    for (
+      let ix = Math.floor(x1 / FLOOD_CELL);
+      ix <= Math.floor(x2 / FLOOD_CELL);
+      ix++
+    ) {
+      if (flooded.has(iy * cols + ix)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Cells the player body can occupy, flooded 4-connected from the start (no
+ * diagonal corner-cutting). A cell is open iff the player fits centered in
+ * it: the body rect, shaved 1px per side so edge-tangent contact counts as
+ * fitting, must miss every blocking part. Cells whose center sits below
+ * H - ph/2 are excluded: no alive transit under the world floor (the scene
+ * respawns at H + 60, so this is conservative by design).
+ */
+function floodFrom(
+  start: Point,
+  blockingParts: Point[][],
+  width: number,
+  height: number,
+): Set<number> {
+  const { pw, ph } = playerSize(width, height);
+  const cols = Math.ceil(width / FLOOD_CELL);
+  const rows = Math.ceil(height / FLOOD_CELL);
+  const maxCy = height - ph / 2;
+  // Part bounding boxes first so far cells reject in O(1).
+  const boxes = blockingParts.map((ring) => bbox([ring]));
+  const blocked = (ix: number, iy: number): boolean => {
+    const cx = ix * FLOOD_CELL + FLOOD_CELL / 2;
+    const cy = iy * FLOOD_CELL + FLOOD_CELL / 2;
+    if (cx < 0 || cx >= width || cy < 0 || cy > maxCy) {
+      return true;
+    }
+    const x1 = cx - pw / 2 + 1;
+    const y1 = cy - ph / 2 + 1;
+    const x2 = cx + pw / 2 - 1;
+    const y2 = cy + ph / 2 - 1;
+    return blockingParts.some((ring, i) => {
+      const [bx1, by1, bx2, by2] = boxes[i];
+      if (x2 < bx1 || x1 > bx2 || y2 < by1 || y1 > by2) {
+        return false;
+      }
+      return rectHitsRing(x1, y1, x2, y2, ring);
+    });
+  };
+  const seen = new Set<number>();
+  const seedIx = Math.floor(start[0] / FLOOD_CELL);
+  const seedIy = Math.floor(start[1] / FLOOD_CELL);
+  const queue: Array<[number, number]> = [[seedIx, seedIy]];
+  while (queue.length > 0) {
+    const [ix, iy] = queue.pop() as [number, number];
+    if (ix < 0 || iy < 0 || ix >= cols || iy >= rows) {
+      continue;
+    }
+    const key = iy * cols + ix;
+    if (seen.has(key)) {
+      continue;
+    }
+    // The seed is forced open: pickStart fit the body by exact rects, so a
+    // conservative grid cell there must not strand the flood.
+    if ((ix !== seedIx || iy !== seedIy) && blocked(ix, iy)) {
+      continue;
+    }
+    seen.add(key);
+    queue.push([ix + 1, iy], [ix - 1, iy], [ix, iy + 1], [ix, iy - 1]);
+  }
+  return seen;
+}
+
+interface GoalSpot {
+  point: Point;
+  platform: Platform;
+  moved: boolean;
+}
+
+/**
+ * First clear slot at least minDist from the start: platforms farthest
+ * first by midpoint, slots midpoint-out within each part, restricted to
+ * flood-reached airspace (the standing body must overlap a flooded cell).
+ * Null when no platform qualifies; the caller decides what a miss means
+ * (next pass, generation, or fallback).
+ */
+function pickGoal(
+  platforms: Platform[],
+  exclude: Platform | null,
+  parts: Point[][],
+  startX: number,
+  width: number,
+  height: number,
+  flooded: Set<number>,
+  minDist: number,
+): GoalSpot | null {
+  const gr = Math.min(width, height) * 0.024;
+  const { pw, ph } = playerSize(width, height);
+  const cols = Math.ceil(width / FLOOD_CELL);
+  const mid = (p: Platform): number => (p.box[0] + p.box[2]) / 2;
+  const ordered = [...platforms]
+    .filter((p) => p !== exclude)
+    .sort((a, b) => Math.abs(mid(b) - startX) - Math.abs(mid(a) - startX));
+  // Midpoint first, then outward: the goal stays centered when it can.
+  const slots = [4, 3, 5, 2, 6, 1, 7, 0, 8];
+  for (const [index, platform] of ordered.entries()) {
+    for (const part of platform.object.parts) {
+      const [x1, , x2] = bbox([part]);
+      for (const s of slots) {
+        const x = x1 + ((x2 - x1) * (s + 0.5)) / 9;
+        if (Math.abs(x - startX) < minDist) {
+          continue;
+        }
+        const topY = topSurfaceAtX(part, x);
+        if (topY === null) {
+          continue;
+        }
+        const y = topY - gr;
+        if (y < gr * 2) {
+          continue;
+        }
+        // Trigger box plus headroom, strictly above the surface so the host
+        // platform's own top never counts as a hit.
+        const clear = !parts.some((ring) =>
+          rectHitsRing(x - gr, topY - gr * 2 - 8, x + gr, topY - 1, ring),
+        );
+        if (!clear) {
+          continue;
+        }
+        // The standing body must fit exactly (bottom shaved: resting on the
+        // host top counts as fitting) and overlap flooded airspace.
+        const bodyFits = !parts.some((ring) =>
+          rectHitsRing(x - pw / 2, topY - ph, x + pw / 2, topY - 1, ring),
+        );
+        if (!bodyFits) {
+          continue;
+        }
+        if (
+          !rectTouchesFlood(x - pw / 2, topY - ph, x + pw / 2, topY, flooded, cols)
+        ) {
+          continue;
+        }
+        return {
+          point: [Math.round(x), Math.round(y)],
+          platform,
+          moved: index > 0,
+        };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Placement for a generated goal step: the flooded cell farthest
+ * (horizontally) from the start that also sits within jump margins of a
+ * box-reached solid, so the step is neither sealed nor a sky island.
+ * First non-embedding candidate wins; the start cell always qualifies, so
+ * this terminates (pocket best-effort when the floor is unmeetable).
+ */
+function generationSpec(
+  flooded: Set<number>,
+  start: Point,
+  width: number,
+  height: number,
+  boxReached: Platform[],
+  blockingParts: Point[][],
+): { cx: number; top: number } {
+  const { ph } = playerSize(width, height);
+  const half = Math.round(width * 0.09);
+  const gap = maxGapPx(width, height);
+  const rise = maxRisePx(height);
+  const cols = Math.ceil(width / FLOOD_CELL);
+  const cells: Array<{ cx: number; cy: number }> = [];
+  for (const key of flooded) {
+    const cx = (key % cols) * FLOOD_CELL + FLOOD_CELL / 2;
+    const cy = Math.floor(key / cols) * FLOOD_CELL + FLOOD_CELL / 2;
+    const near = boxReached.some((p) => {
+      const hGap = Math.max(0, p.box[0] - cx, cx - p.box[2]);
+      return hGap <= gap && p.box[1] - cy <= rise;
+    });
+    if (near) {
+      cells.push({ cx, cy });
+    }
+  }
+  cells.sort(
+    (a, b) =>
+      Math.abs(b.cx - start[0]) - Math.abs(a.cx - start[0]) ||
+      Math.abs(a.cy - start[1]) - Math.abs(b.cy - start[1]),
+  );
+  for (const { cx, cy } of cells) {
+    const x = Math.min(Math.max(Math.round(cx), half), width - half);
+    const top = Math.round(cy + ph / 2);
+    const embeds = blockingParts.some((ring) =>
+      rectHitsRing(x - half, top, x + half, top + 12, ring),
+    );
+    if (!embeds) {
+      return { cx: x, top };
+    }
+  }
+  return { cx: Math.round(start[0]), top: Math.round(start[1] + ph / 2) };
+}
+
 /** Platforms reachable from `from` by jumps (identity is by platform). */
 function reachableSet(
   from: Platform,
@@ -336,11 +563,15 @@ export function assembleLevel(input: AssembleInput): AssembleResult {
     .map((o) => ({ object: o, box: bbox(o.parts) }));
   const solidById = new Map(solids.map((s) => [s.object.id, s]));
   const allParts = objects.flatMap((o) => o.parts);
+  // Goal freeness ignores decor (no bodies in the scene) but keeps hazards:
+  // a win zone must be enterable without dying.
+  const blockingParts = objects
+    .filter((o) => o.role !== "decor")
+    .flatMap((o) => o.parts);
 
   const picked = pickStart(platforms, allParts, width, height);
   const start = picked.point;
 
-  const gr = Math.min(width, height) * 0.024;
   const startBox =
     picked.platform ??
     platforms.reduce((a, b) =>
@@ -349,33 +580,103 @@ export function assembleLevel(input: AssembleInput): AssembleResult {
         ? a
         : b,
     );
-  const others = platforms.filter((p) => p !== startBox);
-  const goalBox =
-    others.length === 0
-      ? null
-      : others.reduce((a, b) => (a.box[2] > b.box[2] ? a : b));
-  const goalPlatform =
-    others.length === 0
-      ? null
-      : others.reduce((a, b) => (a.box[2] > b.box[2] ? a : b));
-  const topPoint = (box: Box): Point => [
-    Math.round((box[0] + box[2]) / 2),
-    Math.max(Math.round(gr * 2), Math.round(box[1] - gr)),
-  ];
+  const startSolid = solidById.get(startBox.object.id) as Platform;
+  // Reachability is a hybrid: the box BFS below is jump-aware but blind to
+  // walls inside boxes, so the flood (seal-aware, jump-blind) gates every
+  // goal spot first. Both must pass.
+  let flooded = floodFrom(start, blockingParts, width, height);
+  const floor = Math.max(width * 0.2, 150);
+  const spot = (
+    plats: Platform[],
+    exclude: Platform | null,
+    minDist: number,
+  ): GoalSpot | null =>
+    pickGoal(
+      plats,
+      exclude,
+      blockingParts,
+      start[0],
+      width,
+      height,
+      flooded,
+      minDist,
+    );
+  let stepCounter = 0;
+  const placeGeneratedStep = (boxReached: Platform[]): Platform => {
+    const spec = generationSpec(
+      flooded,
+      start,
+      width,
+      height,
+      boxReached,
+      blockingParts,
+    );
+    const half = Math.round(width * 0.09);
+    const step: LevelObject = {
+      id: stepCounter === 0 ? "goal-step" : `goal-step-${stepCounter + 1}`,
+      label: "stepping platform",
+      phrase: "stepping platform",
+      role: "platform",
+      reason: "Generated so the goal stays clear of the start.",
+      parts: [
+        rectPart(spec.cx - half, spec.top, spec.cx + half, spec.top + 12),
+      ],
+    };
+    stepCounter++;
+    objects.push(step);
+    const plat: Platform = { object: step, box: bbox(step.parts) };
+    platforms.push(plat);
+    solids.push(plat);
+    solidById.set(step.id, plat);
+    blockingParts.push(...step.parts);
+    flooded = floodFrom(start, blockingParts, width, height);
+    notes.push(GEN_NOTE);
+    return plat;
+  };
+  // Goal on the generated step if it qualifies, else the farthest viable
+  // spot anywhere (pocket best-effort), else the floor fallback.
+  const pickOnStep = (step: Platform): GoalSpot | null =>
+    spot([step], null, width * 0.4) ??
+    spot([step], null, floor) ??
+    spot(platforms, null, 0);
+  const closerCheck = (g: Point): void => {
+    if (Math.abs(g[0] - start[0]) < width * 0.4) {
+      notes.push("Goal closer than 40% of the level width.");
+    }
+  };
   let goal: Point;
-  if (goalPlatform === null) {
-    goal = [width - 60, height - 60];
+  let host: Platform | null;
+  const initial =
+    spot(platforms, startBox, width * 0.4) ?? spot(platforms, startBox, floor);
+  if (initial) {
+    goal = initial.point;
+    host = initial.platform;
+    if (initial.moved) {
+      notes.push("Moved the goal to an open spot.");
+    }
   } else {
-    goal = topPoint(goalPlatform.box);
-    const startSolid = solidById.get(startBox.object.id) as Platform;
-    const goalSolid = solidById.get(goalPlatform.object.id) as Platform;
+    const step = placeGeneratedStep([
+      ...reachableSet(startSolid, solids, width, height),
+    ]);
+    const repick = pickOnStep(step);
+    if (repick) {
+      goal = repick.point;
+      host = repick.platform;
+    } else {
+      goal = [width - 60, height - 60];
+      host = null;
+    }
+  }
+  closerCheck(goal);
+  if (host !== null) {
+    const goalSolid = solidById.get(host.object.id) as Platform;
     if (!reachableSet(startSolid, solids, width, height).has(goalSolid)) {
       // One mid-way stepping platform, then nudge the goal to the farthest
       // solid actually reachable if the gap is still broken.
       const startMid = (startBox.box[0] + startBox.box[2]) / 2;
-      const goalMid = (goalPlatform.box[0] + goalPlatform.box[2]) / 2;
+      const goalMid = (host.box[0] + host.box[2]) / 2;
       const midX = Math.round((startMid + goalMid) / 2);
-      const midTop = Math.round((startBox.box[1] + goalPlatform.box[1]) / 2);
+      const midTop = Math.round((startBox.box[1] + host.box[1]) / 2);
       const half = Math.round(width * 0.09);
       const step: LevelObject = {
         id: "reach-step",
@@ -389,14 +690,31 @@ export function assembleLevel(input: AssembleInput): AssembleResult {
       const stepPlatform: Platform = { object: step, box: bbox(step.parts) };
       platforms.push(stepPlatform);
       solids.push(stepPlatform);
+      solidById.set(step.id, stepPlatform);
+      blockingParts.push(...step.parts);
+      flooded = floodFrom(start, blockingParts, width, height);
       notes.push("Added a stepping platform to bridge a gap.");
       const reached = reachableSet(startSolid, solids, width, height);
       if (!reached.has(goalSolid)) {
-        const fallback = [...reached].reduce((a, b) =>
-          a.box[2] > b.box[2] ? a : b,
-        );
-        goal = topPoint(fallback.box);
-        notes.push("Moved the goal onto a reachable platform.");
+        const nudge =
+          spot([...reached], null, width * 0.4) ??
+          spot([...reached], null, floor);
+        if (nudge) {
+          goal = nudge.point;
+          host = nudge.platform;
+          notes.push("Moved the goal onto a reachable platform.");
+        } else {
+          const step2 = placeGeneratedStep([...reached]);
+          const repick2 = pickOnStep(step2);
+          if (repick2) {
+            goal = repick2.point;
+            host = repick2.platform;
+          } else {
+            goal = [width - 60, height - 60];
+            host = null;
+          }
+        }
+        closerCheck(goal);
       }
     }
   }
@@ -414,4 +732,61 @@ export function assembleLevel(input: AssembleInput): AssembleResult {
     },
     notes,
   };
+}
+
+/**
+ * Goal-placement playability checks for finished levels (sweep/export time,
+ * never a route upload reject): the trigger box plus a player-sized headroom
+ * column must be empty of every blocking part (every role except decor),
+ * and the goal must sit at least 40% of the level width from the start.
+ * Returns issues, empty when well placed.
+ */
+export function goalPlacementIssues(level: Level): string[] {
+  const issues: string[] = [];
+  const { width, height, start, goal } = level;
+  const gr = Math.min(width, height) * 0.024;
+  const [gx, gy] = goal;
+  const parts = level.objects
+    .filter((o) => o.role !== "decor")
+    .flatMap((o) => o.parts);
+  // Same rect the assembler guarantees, shaved 1px off the bottom so resting
+  // exactly on the host top does not count as a hit.
+  const blocked = parts.some((ring) =>
+    rectHitsRing(gx - gr, gy - gr - 8, gx + gr, gy + gr - 1, ring),
+  );
+  if (blocked) {
+    issues.push("goal trigger box or headroom is blocked");
+  }
+  const dx = Math.abs(gx - start[0]);
+  if (dx < width * 0.4) {
+    issues.push(
+      `goal ${Math.round(dx)}px from the start, under 40% of the level width`,
+    );
+  }
+  return issues;
+}
+
+/**
+ * Whether the goal is flood-reachable from the start (sweep/export-time
+ * seal check): same grid, erosion, and seed as the assembler; the standing
+ * body below the goal must overlap flooded airspace.
+ */
+export function goalReachableByFlood(level: Level): boolean {
+  const { width, height, start, goal } = level;
+  const parts = level.objects
+    .filter((o) => o.role !== "decor")
+    .flatMap((o) => o.parts);
+  const flooded = floodFrom(start, parts, width, height);
+  const gr = Math.min(width, height) * 0.024;
+  const { pw, ph } = playerSize(width, height);
+  const cols = Math.ceil(width / FLOOD_CELL);
+  const topY = goal[1] + gr;
+  return rectTouchesFlood(
+    goal[0] - pw / 2,
+    topY - ph,
+    goal[0] + pw / 2,
+    topY,
+    flooded,
+    cols,
+  );
 }
