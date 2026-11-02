@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { onJumpEvent } from "@/game/jumpInput";
 
 interface Entry {
   t: number;
@@ -89,7 +90,15 @@ export default function InputLogger() {
     }
     window.addEventListener("click", onClick as EventListener, opts);
     document.addEventListener("selectionchange", onSelection);
+    const unsubJump = onJumpEvent((event) => {
+      push(
+        `jump:${event.type}${event.reason ? `:${event.reason}` : ""}`,
+        event.grounded ? "g" : "a",
+        `${event.at}`,
+      );
+    });
     return () => {
+      unsubJump();
       for (const type of ["pointerdown", "pointerup", "pointercancel"]) {
         window.removeEventListener(type, onPointer as EventListener, opts);
       }
