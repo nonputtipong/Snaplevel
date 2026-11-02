@@ -7,6 +7,7 @@ export const touchInput = {
   left: false,
   right: false,
   jumpQueued: false,
+  jumpHeld: false,
 };
 
 export type HoldFlag = "left" | "right";
@@ -30,10 +31,21 @@ export function releasePointer(pointerId: number): void {
     holders[flag].delete(pointerId);
     touchInput[flag] = holders[flag].size > 0;
   });
+  jumpHolders.delete(pointerId);
+  touchInput.jumpHeld = jumpHolders.size > 0;
+}
+
+const jumpHolders = new Set<number>();
+
+/** Hold the jump button: queue one jump now, repeat on landing while held. */
+export function holdJump(pointerId: number): void {
+  queueJump();
+  jumpHolders.add(pointerId);
+  touchInput.jumpHeld = true;
 }
 
 /** Queue one jump; the scene consumes it on its next frame, so even a tap
- * shorter than one frame lands. Holding the button does not repeat. */
+ * shorter than one frame lands. Prefer holdJump for the button. */
 export function queueJump(): void {
   touchInput.jumpQueued = true;
 }
@@ -55,7 +67,9 @@ export function takeQueuedJump(): boolean {
 export function releaseTouch(): void {
   holders.left.clear();
   holders.right.clear();
+  jumpHolders.clear();
   touchInput.left = false;
   touchInput.right = false;
   touchInput.jumpQueued = false;
+  touchInput.jumpHeld = false;
 }

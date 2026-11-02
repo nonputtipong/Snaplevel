@@ -4,6 +4,12 @@ import { centroid } from "./geometry";
 import { roleToBodyOptions, type BodyOptions } from "./roles";
 import { PLAYER_JUMP, PLAYER_SPEED, playerSize } from "./physics";
 import { releaseTouch, takeQueuedJump, touchInput } from "./touchInput";
+import {
+  createJumpState,
+  resetJump,
+  updateJump,
+  type JumpState,
+} from "./jumpInput";
 import { resolveFrameInput } from "./frameInput";
 import {
   findFreeSpot,
@@ -54,6 +60,7 @@ export class LevelScene extends Phaser.Scene {
   private keyR?: Phaser.Input.Keyboard.Key;
   private keyD?: Phaser.Input.Keyboard.Key;
   private groundSolids = new Set<string>();
+  private jumpState: JumpState = createJumpState();
   private roleById = new Map<string, Role>();
   private won = false;
   private debugOn = false;
@@ -84,6 +91,7 @@ export class LevelScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, releaseTouch);
     const { width, height } = this.level;
     this.groundSolids.clear();
+    resetJump(this.jumpState);
     this.roleById = new Map(this.level.objects.map((o) => [o.id, o.role]));
     this.solidParts = [];
     this.rescueState = { airFrames: 0 };
@@ -207,16 +215,30 @@ export class LevelScene extends Phaser.Scene {
       return;
     }
     const speed = this.level.width * PLAYER_SPEED;
+    const pressed =
+      takeQueuedJump() ||
+      Phaser.Input.Keyboard.JustDown(this.cursors.space) ||
+      Phaser.Input.Keyboard.JustDown(this.cursors.up) ||
+      Phaser.Input.Keyboard.JustDown(this.keyW);
+    const held =
+      touchInput.jumpHeld ||
+      this.cursors.space.isDown ||
+      this.cursors.up.isDown ||
+      this.keyW.isDown;
+    const jump = updateJump(
+      this.jumpState,
+      this.time.now,
+      pressed,
+      held,
+      this.groundSolids.size > 0,
+    );
     const frame = resolveFrameInput({
       moveLeft:
         this.cursors.left.isDown || this.keyA.isDown || touchInput.left,
       moveRight: this.cursors.right.isDown || touchInput.right,
-      jump:
-        takeQueuedJump() ||
-        Phaser.Input.Keyboard.JustDown(this.cursors.space) ||
-        Phaser.Input.Keyboard.JustDown(this.cursors.up) ||
-        Phaser.Input.Keyboard.JustDown(this.keyW),
-      grounded: this.groundSolids.size > 0,
+      jump: jump.jump,
+      // The jump module already applied grounded/coyote/buffer rules.
+      grounded: true,
     });
     if (frame.vx !== 0) {
       player.setVelocityX(frame.vx * speed);
@@ -350,6 +372,7 @@ export class LevelScene extends Phaser.Scene {
     );
     this.player.setVelocity(0, 0);
     this.groundSolids.clear();
+    resetJump(this.jumpState);
     this.rescueState = { airFrames: 0 };
     playSfx("respawn");
     this.dust?.explode(8, x, y);
@@ -363,6 +386,8 @@ export class LevelScene extends Phaser.Scene {
     }
     this.won = true;
     this.player?.setVelocity(0, 0);
+    resetJump(this.jumpState);
+    releaseTouch();
     playSfx("win");
     const [gx, gy] = this.level.goal;
     this.confetti?.explode(36, gx, gy);
