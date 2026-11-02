@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   holdDown,
+  holdJump,
   queueJump,
   releasePointer,
   releaseTouch,
@@ -77,4 +78,32 @@ test("releaseTouch also forgets held pointers", () => {
   releaseTouch();
   releasePointer(1);
   expect(touchInput.right).toBe(false);
+});
+
+test("holdJump queues once and tracks held until its pointer releases", () => {
+  releaseTouch();
+  holdJump(7);
+  expect(takeQueuedJump()).toBe(true);
+  expect(touchInput.jumpHeld).toBe(true);
+  releasePointer(7);
+  expect(touchInput.jumpHeld).toBe(false);
+});
+
+test("releasing a direction pointer keeps jump held and vice versa", () => {
+  releaseTouch();
+  holdDown("right", 1);
+  holdJump(2);
+  releasePointer(1);
+  expect(touchInput.right).toBe(false);
+  expect(touchInput.jumpHeld).toBe(true);
+  releasePointer(2);
+  expect(touchInput.jumpHeld).toBe(false);
+});
+
+test("releaseTouch clears jump held state", () => {
+  releaseTouch();
+  holdJump(3);
+  releaseTouch();
+  expect(touchInput.jumpHeld).toBe(false);
+  expect(touchInput.jumpQueued).toBe(false);
 });

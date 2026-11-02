@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   holdDown,
-  queueJump,
+  holdJump,
   releasePointer,
   releaseTouch,
   type HoldFlag,
 } from "@/game/touchInput";
 
 const BUTTON =
-  "flex h-16 w-16 touch-none items-center justify-center rounded-full bg-slate-800/80 text-2xl text-slate-100 select-none active:bg-slate-600 [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none]";
+  "flex h-16 w-16 touch-none items-center justify-center rounded-full bg-slate-800/80 text-2xl text-slate-100 transition-transform duration-75 select-none active:bg-slate-600 [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none]";
+
+const PRESSED = "scale-90 brightness-150";
 
 /** Capture the pointer so a drifting finger (or a second touch) keeps
  * delivering to this button instead of firing leave. Synthetic events
@@ -23,33 +25,26 @@ function capture(event: React.PointerEvent): void {
   }
 }
 
-function hold(flag: HoldFlag) {
-  return {
-    onPointerDown: (event: React.PointerEvent) => {
-      event.preventDefault();
-      capture(event);
-      holdDown(flag, event.pointerId);
-    },
-    onPointerUp: (event: React.PointerEvent) => {
-      releasePointer(event.pointerId);
-    },
-    onPointerCancel: (event: React.PointerEvent) => {
-      releasePointer(event.pointerId);
-    },
-    onPointerLeave: (event: React.PointerEvent) => {
-      releasePointer(event.pointerId);
-    },
-  };
-}
+type Control = HoldFlag | "jump" | "restart";
 
 /**
  * Touch controls, coarse pointers only. Each pointer owns its button's
  * flag, so holding Right while tapping Jump works (multi-touch). Held
- * flags drive the same per-frame poll as the keyboard; Jump queues one
- * frame-guaranteed hop. Never stuck: each pointer's up/cancel/leave
+ * flags drive the same per-frame poll as the keyboard; holding Jump
+ * re-jumps on every landing. Never stuck: each pointer's up/cancel/leave
  * releases only its own flag, and global exits release everything.
  */
 export default function TouchControls({ onRestart }: { onRestart: () => void }) {
+  const [pressed, setPressed] = useState<Record<Control, boolean>>({
+    left: false,
+    right: false,
+    jump: false,
+    restart: false,
+  });
+  const set = (control: Control, value: boolean) => {
+    setPressed((prev) => (prev[control] === value ? prev : { ...prev, [control]: value }));
+  };
+
   useEffect(() => {
     const release = () => releaseTouch();
     const onVisibility = () => {
@@ -66,16 +61,49 @@ export default function TouchControls({ onRestart }: { onRestart: () => void }) 
     };
   }, []);
 
+  function hold(flag: HoldFlag) {
+    return {
+      onPointerDown: (event: React.PointerEvent) => {
+        event.preventDefault();
+        capture(event);
+        holdDown(flag, event.pointerId);
+        set(flag, true);
+      },
+      onPointerUp: (event: React.PointerEvent) => {
+        releasePointer(event.pointerId);
+        set(flag, false);
+      },
+      onPointerCancel: (event: React.PointerEvent) => {
+        releasePointer(event.pointerId);
+        set(flag, false);
+      },
+      onPointerLeave: (event: React.PointerEvent) => {
+        releasePointer(event.pointerId);
+        set(flag, false);
+      },
+    };
+  }
+
   return (
     <div
       className="hidden w-full pb-[env(safe-area-inset-bottom)] [@media(pointer:coarse)]:flex [@media(pointer:coarse)]:items-center [@media(pointer:coarse)]:justify-between"
       onContextMenu={(event) => event.preventDefault()}
     >
       <div className="flex gap-3">
-        <button type="button" aria-label="Move left" className={BUTTON} {...hold("left")}>
+        <button
+          type="button"
+          aria-label="Move left"
+          className={`${BUTTON} ${pressed.left ? PRESSED : ""}`}
+          {...hold("left")}
+        >
           ◀
         </button>
-        <button type="button" aria-label="Move right" className={BUTTON} {...hold("right")}>
+        <button
+          type="button"
+          aria-label="Move right"
+          className={`${BUTTON} ${pressed.right ? PRESSED : ""}`}
+          {...hold("right")}
+        >
           ▶
         </button>
       </div>
@@ -84,27 +112,35 @@ export default function TouchControls({ onRestart }: { onRestart: () => void }) 
           type="button"
           aria-label="Restart level"
           onClick={onRestart}
-          className="flex h-12 w-12 touch-none items-center justify-center rounded-full bg-slate-800/80 text-xl text-slate-100 select-none active:bg-slate-600 [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none]"
+          onPointerDown={() => set("restart", true)}
+          onPointerUp={() => set("restart", false)}
+          onPointerCancel={() => set("restart", false)}
+          onPointerLeave={() => set("restart", false)}
+          className={`flex h-12 w-12 touch-none items-center justify-center rounded-full bg-slate-800/80 text-xl text-slate-100 transition-transform duration-75 select-none active:bg-slate-600 [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] ${pressed.restart ? PRESSED : ""}`}
         >
           ⟳
         </button>
         <button
           type="button"
           aria-label="Jump"
-          className={`${BUTTON} h-20 w-20 font-bold`}
+          className={`${BUTTON} h-20 w-20 font-bold ${pressed.jump ? PRESSED : ""}`}
           onPointerDown={(event) => {
             event.preventDefault();
             capture(event);
-            queueJump();
+            holdJump(event.pointerId);
+            set("jump", true);
           }}
           onPointerUp={(event) => {
             releasePointer(event.pointerId);
+            set("jump", false);
           }}
           onPointerCancel={(event) => {
             releasePointer(event.pointerId);
+            set("jump", false);
           }}
           onPointerLeave={(event) => {
             releasePointer(event.pointerId);
+            set("jump", false);
           }}
         >
           ▲
