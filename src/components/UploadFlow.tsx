@@ -97,7 +97,7 @@ export default function UploadFlow({
         <button
           type="button"
           onClick={reset}
-          className="rounded-full border border-slate-600 bg-slate-900 px-5 py-2 font-medium text-slate-100 hover:bg-slate-800"
+          className="inline-flex min-h-[44px] touch-manipulation items-center rounded-full border border-slate-600 bg-slate-900 px-5 py-2 font-medium text-slate-100 hover:bg-slate-800"
         >
           ＋ New photo
         </button>
@@ -135,7 +135,7 @@ export default function UploadFlow({
         <button
           type="button"
           onClick={reset}
-          className="touch-manipulation rounded-full bg-slate-100 px-5 py-2 font-medium text-slate-950 hover:bg-white"
+          className="inline-flex min-h-[44px] touch-manipulation items-center rounded-full bg-slate-100 px-5 py-2 font-medium text-slate-950 hover:bg-white"
         >
           Try again
         </button>
@@ -205,7 +205,7 @@ export default function UploadFlow({
         <button
           type="button"
           onClick={() => void onSample()}
-          className="touch-manipulation text-sm text-slate-300 underline underline-offset-4 hover:text-white"
+          className="inline-flex min-h-[44px] touch-manipulation items-center text-sm text-slate-300 underline underline-offset-4 hover:text-white"
         >
           Try a sample photo
         </button>
