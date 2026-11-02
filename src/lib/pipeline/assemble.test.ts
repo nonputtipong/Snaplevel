@@ -32,6 +32,17 @@ function obj(
   return { label, phrase: label, reason: `${label} reason`, role, area, polygons };
 }
 
+function assembleOk(input: Parameters<typeof assembleLevel>[0]): {
+  level: Level;
+  notes: string[];
+} {
+  const { level, notes } = assembleLevel(input);
+  if (!level) {
+    throw new Error("expected a winnable level");
+  }
+  return { level, notes };
+}
+
 const BASE = {
   image: "data:image/jpeg;base64,xx",
   width: 1000,
@@ -40,7 +51,7 @@ const BASE = {
 };
 
 test("carries roles and reasons with no fixes on a clean level", () => {
-  const { level, notes } = assembleLevel({
+  const { level, notes } = assembleOk({
     ...BASE,
     objects: [
       obj("a", [square(10, 300, 100)]),
@@ -64,7 +75,7 @@ test("carries roles and reasons with no fixes on a clean level", () => {
 });
 
 test("promotes the largest object when platforms drop below two", () => {
-  const { level, notes } = assembleLevel({
+  const { level, notes } = assembleOk({
     ...BASE,
     objects: [
       obj("a", [square(10, 420, 50)], "platform", 5000),
@@ -92,7 +103,7 @@ test("promotes the largest object when platforms drop below two", () => {
 });
 
 test("unreachable goal gains a step and a nudge with notes", () => {
-  const { level, notes } = assembleLevel({
+  const { level, notes } = assembleOk({
     ...BASE,
     objects: [
       obj("a", [square(10, 300, 100)], "platform", 5000),
@@ -116,7 +127,7 @@ test("unreachable goal gains a step and a nudge with notes", () => {
 });
 
 test("single object yields ground, one step, and the sparse hint", () => {
-  const { level, notes } = assembleLevel({
+  const { level, notes } = assembleOk({
     ...BASE,
     objects: [obj("a", [square(10, 300, 100)], "bouncy", 500)],
   });
@@ -136,7 +147,7 @@ test("single object yields ground, one step, and the sparse hint", () => {
 });
 
 test("zero objects yields ground plus two steps, never empty", () => {
-  const { level, notes } = assembleLevel({ ...BASE, objects: [] });
+  const { level, notes } = assembleOk({ ...BASE, objects: [] });
   expect(level.objects.map((o) => o.id)).toEqual(["ground", "step-0", "step-1"]);
   expect(level.hint).toBe(SPARSE_HINT);
   expect(notes).toEqual([
@@ -147,7 +158,7 @@ test("zero objects yields ground plus two steps, never empty", () => {
 });
 
 test("blocked headroom skips to the next platform", () => {
-  const { level } = assembleLevel({
+  const { level } = assembleOk({
     ...BASE,
     objects: [
       obj("a", [square(10, 300, 100)], "platform", 5000),
@@ -161,7 +172,7 @@ test("blocked headroom skips to the next platform", () => {
 });
 
 test("goal inside a solid moves to a clear spot", () => {
-  const { level, notes } = assembleLevel({
+  const { level, notes } = assembleOk({
     ...BASE,
     objects: [
       obj("a", [square(10, 300, 100)], "platform", 5000),
@@ -190,7 +201,7 @@ test("goal inside a solid moves to a clear spot", () => {
 });
 
 test("roofed goal top moves to the next platform", () => {
-  const { level, notes } = assembleLevel({
+  const { level, notes } = assembleOk({
     ...BASE,
     objects: [
       obj("a", [square(10, 300, 100)], "platform", 5000),
@@ -218,7 +229,7 @@ test("roofed goal top moves to the next platform", () => {
 });
 
 test("clustered goal gains a distance note", () => {
-  const { level, notes } = assembleLevel({
+  const { level, notes } = assembleOk({
     ...BASE,
     objects: [
       obj("a", [square(10, 300, 100)], "platform", 5000),
@@ -232,7 +243,7 @@ test("clustered goal gains a distance note", () => {
 });
 
 test("goal prefers a far clear top over a near one", () => {
-  const { level, notes } = assembleLevel({
+  const { level, notes } = assembleOk({
     ...BASE,
     objects: [
       obj("a", [square(10, 300, 100)], "platform", 5000),
@@ -253,7 +264,7 @@ test("goal prefers a far clear top over a near one", () => {
 });
 
 test("goal ignores decor overhead", () => {
-  const { level, notes } = assembleLevel({
+  const { level, notes } = assembleOk({
     ...BASE,
     objects: [
       obj("a", [square(10, 300, 100)], "platform", 5000),
@@ -279,7 +290,7 @@ test("goal ignores decor overhead", () => {
 });
 
 test("relocated goal checks its host, not the rightmost box", () => {
-  const { level, notes } = assembleLevel({
+  const { level, notes } = assembleOk({
     ...BASE,
     objects: [
       obj("a", [square(10, 300, 100)], "platform", 5000),
@@ -310,25 +321,32 @@ test("relocated goal checks its host, not the rightmost box", () => {
   ]);
 });
 
-test("fully roofed level falls back to the floor start", () => {
+test("fully roofed level demotes the roof and runs the strip", () => {
   const roof: Point[] = [
     [0, 0],
     [1000, 0],
     [1000, 450],
     [0, 450],
   ];
-  const { level } = assembleLevel({
+  const { level, notes } = assembleOk({
     ...BASE,
     objects: [
       obj("a", [square(10, 300, 100)], "platform", 100),
       obj("roof", [roof], "bouncy", 99999),
     ],
   });
-  expect(level.start).toEqual([100, 440]);
+  expect(notes).toEqual([
+    "Promoted roof to platform.",
+    "Added a ground floor.",
+    "Simplified layout: some objects are scenery.",
+  ]);
+  expect(level.start).toEqual([60, 462]);
+  expect(level.objects.some((o) => o.label === "roof")).toBe(false);
+  expect(goalReachableByFlood(level)).toBe(true);
 });
 
 test("goalPlacementIssues passes a clean assembled level", () => {
-  const { level } = assembleLevel({
+  const { level } = assembleOk({
     ...BASE,
     objects: [
       obj("a", [square(10, 300, 100)]),
@@ -401,7 +419,7 @@ test("goalPlacementIssues flags a goal overlapping a hazard", () => {
 });
 
 test("goalPlacementIssues flags a clear but clustered goal", () => {
-  const { level } = assembleLevel({
+  const { level } = assembleOk({
     ...BASE,
     objects: [
       obj("a", [square(10, 300, 100)], "platform", 5000),
@@ -421,7 +439,7 @@ test("sealed wall generates a start-side goal step", () => {
     [510, 476],
     [490, 476],
   ];
-  const { level, notes } = assembleLevel({
+  const { level, notes } = assembleOk({
     ...BASE,
     objects: [
       obj("a", [square(10, 300, 100)], "platform", 5000),
@@ -453,7 +471,7 @@ test("sub-player slit seals via erosion", () => {
     [510, 476],
     [490, 476],
   ];
-  const { level, notes } = assembleLevel({
+  const { level, notes } = assembleOk({
     ...BASE,
     objects: [
       obj("a", [square(10, 300, 100)], "platform", 5000),
@@ -480,7 +498,7 @@ test("sealed pocket generates honestly below the floor", () => {
     [220, 476],
     [200, 476],
   ];
-  const { level, notes } = assembleLevel({
+  const { level, notes } = assembleOk({
     ...BASE,
     objects: [
       obj("a", [square(10, 300, 100)], "platform", 5000),
@@ -500,7 +518,7 @@ test("sealed pocket generates honestly below the floor", () => {
   ]);
 });
 
-test("fully blocked level reports it could not place a goal", () => {
+test("fully blocked level demotes the lid and runs the strip", () => {
   const lidA: Point[] = [
     [0, 220],
     [120, 220],
@@ -519,7 +537,7 @@ test("fully blocked level reports it could not place a goal", () => {
     [1000, 375],
     [0, 375],
   ];
-  const { level, notes } = assembleLevel({
+  const { level, notes } = assembleOk({
     ...BASE,
     objects: [
       obj("a", [square(10, 300, 100)], "platform", 5000),
@@ -528,17 +546,19 @@ test("fully blocked level reports it could not place a goal", () => {
       obj("slab", [slab], "bouncy", 20000),
     ],
   });
-  // Every slot is blocked and the flood is seed-only; the full-width lid
-  // also seals the simplified strip, so the fallback reports the blockage
-  // and keeps the degenerate note instead of claiming a winnable level.
-  expect(level.goal).toEqual([940, 440]);
+  // Every slot is blocked and the flood is seed-only, but demoting the
+  // full-width lid to scenery opens the simplified strip.
+  expect(level.goal).toEqual([940, 464]);
+  expect(level.start).toEqual([60, 462]);
   expect(notes).toEqual([
     "Promoted lid to platform.",
     "Added a ground floor.",
-    "Added a generated platform so the goal stays clear of the start.",
-    "Simplified layout is blocked.",
-    "Could not place a reachable goal.",
+    "Simplified layout: some objects are scenery.",
   ]);
+  const scenery = level.objects.find((o) => o.id === "scenery");
+  expect(scenery?.parts).toHaveLength(1);
+  expect(level.objects.some((o) => o.label === "lid")).toBe(false);
+  expect(goalReachableByFlood(level)).toBe(true);
 });
 
 test("degenerate level falls back to a simplified strip layout", () => {
@@ -562,7 +582,7 @@ test("degenerate level falls back to a simplified strip layout", () => {
     [1000, 375],
     [0, 375],
   ];
-  const { level, notes } = assembleLevel({
+  const { level, notes } = assembleOk({
     ...BASE,
     objects: [
       obj("a", [square(10, 300, 100)], "platform", 5000),
@@ -586,10 +606,10 @@ test("degenerate level falls back to a simplified strip layout", () => {
   expect(goalReachableByFlood(level)).toBe(true);
 });
 
-test("blocked strip reports instead of claiming success", () => {
+test("wall-blocked strip demotes the wall and runs", () => {
   // Same degenerate layout plus a full-height wall column crossing the
-  // strip: the fallback must report the blockage, add no strip, and keep
-  // the degenerate note instead of claiming a winnable level.
+  // strip: the wall demotes to scenery (the lid clears the corridor, so
+  // only one demotion is needed) and the strip runs.
   const lidA: Point[] = [
     [0, 220],
     [120, 220],
@@ -614,7 +634,7 @@ test("blocked strip reports instead of claiming success", () => {
     [510, 500],
     [490, 500],
   ];
-  const { level, notes } = assembleLevel({
+  const { level, notes } = assembleOk({
     ...BASE,
     objects: [
       obj("a", [square(10, 300, 100)], "platform", 5000),
@@ -626,12 +646,99 @@ test("blocked strip reports instead of claiming success", () => {
   });
   expect(notes).toEqual([
     "Added a ground floor.",
-    "Added a generated platform so the goal stays clear of the start.",
-    "Simplified layout is blocked.",
-    "Could not place a reachable goal.",
+    "Simplified layout: some objects are scenery.",
   ]);
-  expect(level.objects.some((o) => o.id === "simplified-ground")).toBe(false);
-  expect(goalReachableByFlood(level)).toBe(false);
+  expect(level.start).toEqual([60, 462]);
+  expect(level.goal).toEqual([940, 464]);
+  const scenery = level.objects.find((o) => o.id === "scenery");
+  expect(scenery?.parts).toHaveLength(1);
+  expect(level.objects.some((o) => o.label === "wall")).toBe(false);
+  expect(goalReachableByFlood(level)).toBe(true);
+});
+
+test("demotion opens the strip one blocking part at a time", () => {
+  // Wall column (bottom-touching) plus full-width lid hanging into the
+  // corridor: the wall demotes first, the lid second, then the strip runs.
+  // Both sources are left part-less, so both are removed.
+  const lidA: Point[] = [
+    [0, 220],
+    [120, 220],
+    [120, 280],
+    [0, 280],
+  ];
+  const lidGround: Point[] = [
+    [0, 400],
+    [1000, 400],
+    [1000, 460],
+    [0, 460],
+  ];
+  const slab: Point[] = [
+    [0, 340],
+    [1000, 340],
+    [1000, 375],
+    [0, 375],
+  ];
+  const wall: Point[] = [
+    [490, 0],
+    [510, 0],
+    [510, 500],
+    [490, 500],
+  ];
+  const { level, notes } = assembleOk({
+    ...BASE,
+    objects: [
+      obj("a", [square(10, 300, 100)], "platform", 5000),
+      obj("lidA", [lidA], "hazard", 100),
+      obj("lid", [lidGround], "hazard", 60000),
+      obj("slab", [slab], "bouncy", 20000),
+      obj("wall", [wall], "platform", 10000),
+    ],
+  });
+  expect(notes).toEqual([
+    "Added a ground floor.",
+    "Simplified layout: some objects are scenery.",
+  ]);
+  expect(level.start).toEqual([60, 462]);
+  expect(level.goal).toEqual([940, 464]);
+  const scenery = level.objects.find((o) => o.id === "scenery");
+  expect(scenery?.role).toBe("decor");
+  expect(scenery?.parts).toHaveLength(2);
+  expect(level.objects.some((o) => o.label === "wall")).toBe(false);
+  expect(level.objects.some((o) => o.label === "lid")).toBe(false);
+  expect(goalReachableByFlood(level)).toBe(true);
+});
+
+test("demotion opens the strip at portrait dimensions", () => {
+  // HomeDesk geometry (768x1024): the strip-top row's cell centers sit 3px
+  // below the body's true center, so a cell-identity strip check dips into
+  // the strip's own erosion band and wrongly reports blocked. The overlap
+  // query must see the open corridor after the lid demotes.
+  const lid: Point[] = [
+    [0, 400],
+    [768, 400],
+    [768, 960],
+    [0, 960],
+  ];
+  const { level, notes } = assembleOk({
+    image: "data:image/jpeg;base64,xx",
+    width: 768,
+    height: 1024,
+    timings: { total: 1 },
+    objects: [
+      obj("a", [square(10, 300, 100)], "platform", 5000),
+      obj("lidA", [[[0, 220], [120, 220], [120, 280], [0, 280]]], "hazard", 100),
+      obj("lid", [lid], "hazard", 60000),
+      obj("slab", [[[0, 340], [768, 340], [768, 375], [0, 375]]], "bouncy", 20000),
+    ],
+  });
+  expect(notes).toEqual([
+    "Promoted lid to platform.",
+    "Added a ground floor.",
+    "Simplified layout: some objects are scenery.",
+  ]);
+  expect(level.start).toEqual([60, 977]);
+  expect(level.goal).toEqual([708, 982]);
+  expect(goalReachableByFlood(level)).toBe(true);
 });
 
 test("goalReachableByFlood splits sealed from open levels", () => {
@@ -733,7 +840,7 @@ test("assembleLevel drops objects left with no viable parts", () => {
     [10, 10], [11, 10], [12, 10], [12, 11], [12, 12], [11, 12], [10, 12],
     [10, 11],
   ];
-  const { level } = assembleLevel({
+  const { level } = assembleOk({
     ...BASE,
     objects: [obj("crumb", [sliver], "platform", 50), obj("floor", [square(0, 400, 200)], "platform", 40000)],
   });

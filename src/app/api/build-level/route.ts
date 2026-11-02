@@ -18,16 +18,20 @@ import {
   segmentObjectsWithRetry,
 } from "@/lib/pipeline/segment";
 import { toPolygons } from "@/lib/pipeline/toPolygons";
-import { assembleLevel } from "@/lib/pipeline/assemble";
+import {
+  UNWINNABLE_MESSAGE,
+  assembleLevel,
+} from "@/lib/pipeline/assemble";
 import level1 from "../../../../fixtures/level-1.json";
 import level2 from "../../../../fixtures/level-2.json";
+import level3 from "../../../../fixtures/level-3.json";
 import levelEmpty from "../../../../fixtures/level-empty.json";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const FIXTURES = [level1, level2, levelEmpty];
+const FIXTURES = [level1, level2, level3, levelEmpty];
 const DELAY_MS = 400;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -157,7 +161,7 @@ async function liveBuildLevel(req: NextRequest): Promise<Response> {
             console.info(`[build-level] dropped under 1% of image area: ${result.phrase}`);
           }
         }
-        const { level, notes } = assembleLevel({
+        const assembled = assembleLevel({
           objects: objects.map((o, i) => {
             const kept = results[i].kept;
             return {
@@ -176,6 +180,11 @@ async function liveBuildLevel(req: NextRequest): Promise<Response> {
           height: info.height,
           timings: {},
         });
+        if (assembled.level === null) {
+          send("error", { message: UNWINNABLE_MESSAGE });
+          return;
+        }
+        const { level, notes } = assembled;
         level.timings = {
           find_objects: findMs,
           segment: samMs,

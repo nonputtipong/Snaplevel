@@ -29,10 +29,15 @@ export interface AssembleInput {
 }
 
 export interface AssembleResult {
-  level: Level;
+  /** Null when no winnable layout exists; the route must refuse, not serve. */
+  level: Level | null;
   /** Human-readable log of every deterministic fix applied. */
   notes: string[];
 }
+
+/** Served by the route when assembly reports an unwinnable photo. */
+export const UNWINNABLE_MESSAGE =
+  "This photo has no clear open space to stand on. Try one with a few distinct objects, like a desk, a shelf, or a table.";
 
 type Box = [number, number, number, number]; // x1, y1, x2, y2
 
@@ -657,14 +662,27 @@ export function assembleLevel(input: AssembleInput): AssembleResult {
     notes.push(GEN_NOTE);
     return plat;
   };
+  // Speculative generated steps targeted the failed goal: drop them and
+  // their notes so a step under a low lid cannot seal the strip corridor.
+  const dropSpeculativeSteps = (): void => {
+    for (let i = objects.length - 1; i >= 0; i--) {
+      const id = objects[i].id;
+      if (id === "reach-step" || id.startsWith("goal-step")) {
+        objects.splice(i, 1);
+      }
+    }
+    for (let i = notes.length - 1; i >= 0; i--) {
+      if (notes[i] === GEN_NOTE || notes[i] === BRIDGE_NOTE) {
+        notes.splice(i, 1);
+      }
+    }
+  };
   // Last resort: a full-width bottom strip with the start at one end and
   // the goal at the other. Every strip-top cell along the run must flood
   // open; a photo object reaching the bottom edge blocks it and the level
-  // stays degenerate. Speculative generated steps targeted the failed
-  // goal, so they are dropped (photo objects stay): a step under a low
-  // lid would seal the corridor the fallback promises.
+  // stays degenerate.
   const simplifiedFallback = (): Point | null => {
-    const { ph } = playerSize(width, height);
+    const { pw, ph } = playerSize(width, height);
     const gr = Math.min(width, height) * 0.024;
     const stripTop = height - 24;
     const strip: LevelObject = {
@@ -675,38 +693,128 @@ export function assembleLevel(input: AssembleInput): AssembleResult {
       reason: "Generated so a blocked level stays winnable.",
       parts: [rectPart(0, stripTop, width, height)],
     };
-    const kept = objects.filter(
-      (o) => o.id !== "reach-step" && !o.id.startsWith("goal-step"),
-    );
-    const parts = kept
-      .filter((o) => o.role !== "decor")
+    const parts = objects
+      .filter(
+        (o) =>
+          o.role !== "decor" &&
+          o.id !== "reach-step" &&
+          !o.id.startsWith("goal-step"),
+      )
       .flatMap((o) => o.parts);
     const seed: Point = [60, stripTop - ph / 2];
     const flood = floodFrom(seed, [...parts, ...strip.parts], width, height);
     const cols = Math.ceil(width / FLOOD_CELL);
-    const iy = Math.floor(seed[1] / FLOOD_CELL);
-    for (
-      let ix = Math.floor(seed[0] / FLOOD_CELL);
-      ix <= Math.floor((width - 60) / FLOOD_CELL);
-      ix++
-    ) {
-      if (!flood.has(iy * cols + ix)) {
+    const rows = Math.ceil(height / FLOOD_CELL);
+    // Overlap query per column, not cell identity: the strip-top row's cell
+    // centers can sit a few px off the body's true center and dip into the
+    // strip's own erosion band.
+    for (let cx = 60; cx <= width - 60; cx += FLOOD_CELL) {
+      if (
+        !rectTouchesFlood(
+          cx - pw / 2,
+          seed[1] - ph / 2,
+          cx + pw / 2,
+          seed[1] + ph / 2,
+          flood,
+          cols,
+          rows,
+        )
+      ) {
         return null;
       }
     }
-    const dupe = kept.some((o) =>
+    dropSpeculativeSteps();
+    const dupe = objects.some((o) =>
       o.parts.some((p) => sameRect(p, strip.parts[0])),
     );
-    objects.length = 0;
-    objects.push(...kept, ...(dupe ? [] : [strip]));
-    for (let i = notes.length - 1; i >= 0; i--) {
-      if (notes[i] === GEN_NOTE || notes[i] === BRIDGE_NOTE) {
-        notes.splice(i, 1);
-      }
+    if (!dupe) {
+      objects.push(strip);
     }
     flooded = flood;
     start = [Math.round(seed[0]), Math.round(seed[1])];
     return [width - 60, Math.round(stripTop - gr)];
+  };
+  // Non-decor parts invading the strip corridor, bottom-touching widest
+  // first. The strip itself is never a candidate.
+  const demotionCandidates = (): { object: LevelObject; part: Point[] }[] => {
+    const { pw, ph } = playerSize(width, height);
+    const stripTop = height - 24;
+    const top = stripTop - ph;
+    const x1 = 60 - pw / 2;
+    const x2 = width - 60 + pw / 2;
+    const found: {
+      object: LevelObject;
+      part: Point[];
+      wide: number;
+      bottom: boolean;
+    }[] = [];
+    for (const o of objects) {
+      if (
+        o.role === "decor" ||
+        o.id === "ground" ||
+        o.id === "simplified-ground" ||
+        o.id === "reach-step" ||
+        o.id.startsWith("goal-step")
+      ) {
+        continue;
+      }
+      for (const part of o.parts) {
+        const [bx1, by1, bx2, by2] = bbox([part]);
+        if (by2 < top || by1 > stripTop || bx2 < x1 || bx1 > x2) {
+          continue;
+        }
+        found.push({
+          object: o,
+          part,
+          wide: bx2 - bx1,
+          bottom: by2 >= height - 1,
+        });
+      }
+    }
+    found.sort((a, b) => Number(b.bottom) - Number(a.bottom) || b.wide - a.wide);
+    return found;
+  };
+  const demotePart = (cand: { object: LevelObject; part: Point[] }): void => {
+    const { object, part } = cand;
+    object.parts = object.parts.filter((p) => p !== part);
+    if (object.parts.length === 0) {
+      objects.splice(objects.indexOf(object), 1);
+    }
+    let scenery = objects.find((o) => o.id === "scenery");
+    if (!scenery) {
+      scenery = {
+        id: "scenery",
+        label: "scenery",
+        phrase: "scenery",
+        role: "decor",
+        reason: "Demoted so the level stays winnable.",
+        parts: [],
+      };
+      objects.push(scenery);
+    }
+    scenery.parts.push(part);
+  };
+  // Simplified strip, demoting blocking parts to scenery one at a time
+  // until the strip runs. Null only when nothing is left to demote.
+  const simplifiedWithDemotion = (): {
+    point: Point;
+    demoted: boolean;
+  } | null => {
+    const direct = simplifiedFallback();
+    if (direct) {
+      return { point: direct, demoted: false };
+    }
+    for (;;) {
+      const [next] = demotionCandidates();
+      if (!next) {
+        return null;
+      }
+      demotePart(next);
+      const retry = simplifiedFallback();
+      if (retry) {
+        return { point: retry, demoted: true };
+      }
+    }
   };
   // Goal on the generated step if it qualifies, else the farthest viable
   // spot anywhere (pocket best-effort), else the floor fallback.
@@ -740,17 +848,19 @@ export function assembleLevel(input: AssembleInput): AssembleResult {
       goal = repick.point;
       host = repick.platform;
     } else {
-      const simple = simplifiedFallback();
-      if (simple) {
-        goal = simple;
-        host = null;
-        notes.push("Simplified layout.");
-      } else {
-        goal = [width - 60, height - 60];
-        host = null;
+      const simple = simplifiedWithDemotion();
+      if (!simple) {
         notes.push("Simplified layout is blocked.");
         notes.push("Could not place a reachable goal.");
+        return { level: null, notes };
       }
+      goal = simple.point;
+      host = null;
+      notes.push(
+        simple.demoted
+          ? "Simplified layout: some objects are scenery."
+          : "Simplified layout.",
+      );
     }
   }
   closerCheck(goal);
@@ -796,17 +906,19 @@ export function assembleLevel(input: AssembleInput): AssembleResult {
             goal = repick2.point;
             host = repick2.platform;
           } else {
-            const simple = simplifiedFallback();
-            if (simple) {
-              goal = simple;
-              host = null;
-              notes.push("Simplified layout.");
-            } else {
-              goal = [width - 60, height - 60];
-              host = null;
+            const simple = simplifiedWithDemotion();
+            if (!simple) {
               notes.push("Simplified layout is blocked.");
               notes.push("Could not place a reachable goal.");
+              return { level: null, notes };
             }
+            goal = simple.point;
+            host = null;
+            notes.push(
+              simple.demoted
+                ? "Simplified layout: some objects are scenery."
+                : "Simplified layout.",
+            );
           }
         }
         closerCheck(goal);

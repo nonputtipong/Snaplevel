@@ -2,8 +2,15 @@ import { expect, test } from "bun:test";
 import { NextRequest } from "next/server";
 import { MAX_UPLOAD_BYTES } from "@/lib/image";
 import { MetaError } from "@/lib/meta";
+import { UNWINNABLE_MESSAGE } from "@/lib/pipeline/assemble";
 import { resetRateLimiters } from "@/lib/rateLimit";
 import { POST, reportLiveError } from "./route";
+
+test("unwinnable failure message reads cleanly under the failed title", () => {
+  expect(UNWINNABLE_MESSAGE).toBe(
+    "This photo has no clear open space to stand on. Try one with a few distinct objects, like a desk, a shelf, or a table.",
+  );
+});
 
 const PNG_3X2 = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
