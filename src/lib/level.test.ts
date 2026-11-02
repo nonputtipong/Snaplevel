@@ -3,6 +3,7 @@ import { validateLevel } from "./level";
 import { goalPlacementIssues, goalReachableByFlood } from "./pipeline/assemble";
 import level1 from "../../fixtures/level-1.json";
 import level2 from "../../fixtures/level-2.json";
+import level3 from "../../fixtures/level-3.json";
 import levelEmpty from "../../fixtures/level-empty.json";
 
 describe("validateLevel", () => {
@@ -19,9 +20,20 @@ describe("validateLevel", () => {
     }
   });
 
+  test("accepts portrait fixture 3", () => {
+    const result = validateLevel(level3);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.level.width).toBe(768);
+      expect(result.level.height).toBe(1024);
+      expect(result.level.start).toEqual([60, 977]);
+      expect(result.level.goal).toEqual([708, 982]);
+    }
+  });
+
   test("fixtures have well-placed goals", () => {
     const issues: Record<string, string[]> = {};
-    const levels = [level1, level2].map((raw, i) => {
+    const levels = [level1, level2, level3].map((raw, i) => {
       const result = validateLevel(raw);
       expect(result.ok).toBe(true);
       if (!result.ok) {
@@ -36,10 +48,12 @@ describe("validateLevel", () => {
     expect(issues).toEqual({
       "level-1": [],
       "level-2": ["goal 197px from the start, under 40% of the level width"],
+      "level-3": [],
     });
     // Every shipped example is bot-won and flood-open.
     expect(goalReachableByFlood(levels[0])).toBe(true);
     expect(goalReachableByFlood(levels[1])).toBe(true);
+    expect(goalReachableByFlood(levels[2])).toBe(true);
   });
 
   test("accepts the empty fixture", () => {
