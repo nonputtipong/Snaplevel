@@ -67,7 +67,7 @@ Other commands: `bun test`, `bun run build`.
 ## Privacy
 
 - Uploaded photos are processed in memory on the server and are **not stored** — no files are written, no database, no photo log.
-- Photos are sent to Meta's Model API for processing. Under [Meta's Model API terms](https://dev.meta.ai/legal/terms-of-service), content sent through Contributor-tier services may be used to train and improve Meta's models; which tier applies depends on the account and model designation.
+- Photos are sent to Meta's Model API for processing. Snaplevel calls Meta's Model API in standard mode, in which content is not used to train Meta's models (see [Meta's terms](https://dev.meta.ai/legal/terms-of-service)).
 - Client IPs are read from forwarding headers on a best-effort basis and kept only in the in-memory rate-limit counters, which are lost when the server restarts.
 
 ## Credits and licence
