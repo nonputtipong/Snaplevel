@@ -130,7 +130,7 @@ export default function UploadFlow({
                 "Nothing in that photo could become a platform. Try a busier photo with a few solid objects.",
             };
     return (
-      <div className="flex w-full max-w-md flex-col items-center gap-4 rounded-xl bg-slate-900 px-8 py-8 text-center">
+      <div className="anim-pop flex w-full max-w-md flex-col items-center gap-4 rounded-xl bg-slate-900 px-8 py-8 text-center ring-1 ring-slate-800">
         <p className="text-xl font-semibold text-slate-100">{copy.title}</p>
         <p className="text-slate-300">{copy.message}</p>
         <button
@@ -152,8 +152,23 @@ export default function UploadFlow({
         : progress
           ? STEP_ORDER.indexOf(progress.step)
           : -1;
+    const doneCount = STEP_ORDER.filter(
+      (_, index) => index < activeIndex,
+    ).length;
     return (
-      <div className="flex w-full max-w-md flex-col gap-3 rounded-xl bg-slate-900 px-8 py-8">
+      <div className="anim-pop flex w-full max-w-md flex-col gap-3 rounded-xl bg-slate-900 px-8 py-8 ring-1 ring-slate-800">
+        <div
+          className="h-1 overflow-hidden rounded-full bg-slate-800"
+          role="progressbar"
+          aria-valuenow={doneCount}
+          aria-valuemin={0}
+          aria-valuemax={STEP_ORDER.length}
+        >
+          <div
+            className="h-full rounded-full bg-teal-400 transition-all duration-500"
+            style={{ width: `${(doneCount / STEP_ORDER.length) * 100}%` }}
+          />
+        </div>
         {STEP_ORDER.map((step, index) => {
           const done = index < activeIndex;
           const active = index === activeIndex;
@@ -198,7 +213,7 @@ export default function UploadFlow({
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
-        className="touch-manipulation rounded-full bg-slate-100 px-8 py-4 text-lg font-semibold text-slate-950 hover:bg-white"
+        className="touch-manipulation rounded-full bg-slate-100 px-8 py-4 text-lg font-semibold text-slate-950 shadow-lg shadow-teal-500/10 transition-all duration-200 hover:bg-white hover:shadow-xl hover:shadow-teal-500/20 motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0 motion-safe:active:scale-[0.98]"
       >
         Upload or take a photo
       </button>

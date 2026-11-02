@@ -29,7 +29,7 @@ export default async function PlayPage({
       <div className="flex w-full max-w-5xl items-center justify-between">
         <h1 className="text-lg font-semibold">Snaplevel</h1>
         <nav className="flex touch-manipulation items-center gap-3 text-sm select-none [-webkit-touch-callout:none]">
-          {[0, 1, 2].map((n) => (
+          {["Workbench", "Living Room", "Patio"].map((name, n) => (
             <Link
               key={n}
               href={`/play?fixture=${n}`}
@@ -39,7 +39,7 @@ export default async function PlayPage({
                   : "text-slate-300 hover:bg-slate-800"
               }`}
             >
-              Level {n + 1}
+              {name}
             </Link>
           ))}
         </nav>
