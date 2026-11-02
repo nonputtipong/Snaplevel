@@ -8,6 +8,7 @@ import { LevelScene } from "@/game/LevelScene";
 import { GRAVITY_Y } from "@/game/physics";
 import { isSfxEnabled, setSfxEnabled } from "@/game/sfx";
 import ChainPanel from "./ChainPanel";
+import InputLogger from "./InputLogger";
 import TouchControls from "./TouchControls";
 
 const HUD_BUTTON =
@@ -138,6 +139,7 @@ export default function GameView({ level }: { level: Level }) {
         </div>
       )}
       {showChain && <ChainPanel level={level} onClose={() => setShowChain(false)} />}
+      <InputLogger />
       <TouchControls onRestart={playAgain} />
       <p className="hidden w-full text-center text-xs text-slate-500 [@media(pointer:fine)]:block">
         ← → / A move · Space / W jump · R restart · D outlines
