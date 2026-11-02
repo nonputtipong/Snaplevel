@@ -191,6 +191,10 @@ async function liveBuildLevel(req: NextRequest): Promise<Response> {
           design_level: Date.now() - designStarted,
           total: Date.now() - totalStarted,
         };
+        const allNotes = [...retryNotes, ...notes];
+        if (allNotes.length > 0) {
+          level.notes = allNotes;
+        }
         if (!validateLevel(level).ok) {
           send("error", {
             message: "The level came back in an unreadable shape.",

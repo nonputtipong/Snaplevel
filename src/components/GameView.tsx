@@ -7,6 +7,7 @@ import type { Level } from "@/lib/level";
 import { LevelScene } from "@/game/LevelScene";
 import { GRAVITY_Y } from "@/game/physics";
 import { isSfxEnabled, setSfxEnabled } from "@/game/sfx";
+import ChainPanel from "./ChainPanel";
 import TouchControls from "./TouchControls";
 
 const HUD_BUTTON =
@@ -17,6 +18,7 @@ export default function GameView({ level }: { level: Level }) {
   const sceneRef = useRef<LevelScene | null>(null);
   const [won, setWon] = useState(false);
   const [soundOn, setSoundOn] = useState(false);
+  const [showChain, setShowChain] = useState(false);
 
   useEffect(() => {
     if (!hostRef.current) {
@@ -86,6 +88,16 @@ export default function GameView({ level }: { level: Level }) {
         </button>
         <button
           type="button"
+          onClick={() => setShowChain((open) => !open)}
+          title="Show how this level was made"
+          aria-label="Toggle model chain"
+          aria-pressed={showChain}
+          className={HUD_BUTTON}
+        >
+          ⛓ Chain
+        </button>
+        <button
+          type="button"
           onClick={toggleSound}
           title={soundOn ? "Mute sound" : "Unmute sound"}
           aria-label={soundOn ? "Mute sound" : "Unmute sound"}
@@ -122,6 +134,7 @@ export default function GameView({ level }: { level: Level }) {
           </div>
         </div>
       )}
+      {showChain && <ChainPanel level={level} onClose={() => setShowChain(false)} />}
       <TouchControls onRestart={playAgain} />
       <p className="hidden w-full text-center text-xs text-slate-500 [@media(pointer:fine)]:block">
         ← → / A move · Space / W jump · R restart · D outlines

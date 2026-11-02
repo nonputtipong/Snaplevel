@@ -93,6 +93,39 @@ describe("validateLevel", () => {
     }
   });
 
+  test("accepts optional pipeline notes", () => {
+    const withNotes = structuredClone(level1) as unknown as Record<string, unknown>;
+    withNotes.notes = ["Added a ground floor.", "Retried 'tool chest' as 'toolbox': 2 matches"];
+    const result = validateLevel(withNotes);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.level.notes).toEqual([
+        "Added a ground floor.",
+        "Retried 'tool chest' as 'toolbox': 2 matches",
+      ]);
+    }
+  });
+
+  test("rejects non-array notes", () => {
+    const broken = structuredClone(level1) as unknown as Record<string, unknown>;
+    broken.notes = "Added a ground floor.";
+    const result = validateLevel(broken);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.join(";")).toContain("notes must be an array of strings");
+    }
+  });
+
+  test("rejects a non-string note", () => {
+    const broken = structuredClone(level1) as unknown as Record<string, unknown>;
+    broken.notes = ["ok", 42];
+    const result = validateLevel(broken);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.join(";")).toContain("notes must be an array of strings");
+    }
+  });
+
   test("rejects an unknown role", () => {
     const broken = structuredClone(level1) as unknown as Record<string, unknown>;
     const objects = broken.objects as Record<string, unknown>[];

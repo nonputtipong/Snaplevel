@@ -24,6 +24,7 @@ export interface Level {
   restyledImage?: string;
   timings?: Record<string, number>;
   hint?: string;
+  notes?: string[];
 }
 
 export type ValidationResult =
@@ -124,6 +125,13 @@ export function validateLevel(value: unknown): ValidationResult {
   }
   if (value.hint !== undefined && typeof value.hint !== "string") {
     errors.push("hint must be a string");
+  }
+  if (
+    value.notes !== undefined &&
+    (!Array.isArray(value.notes) ||
+      !value.notes.every((note) => typeof note === "string"))
+  ) {
+    errors.push("notes must be an array of strings");
   }
   if (value.timings !== undefined) {
     const timings = value.timings;
