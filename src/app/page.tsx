@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ShaderBackground from "@/components/ShaderBackground";
 import UploadFlow from "@/components/UploadFlow";
 import { CameraIcon, PlayIcon } from "@/components/icons";
 import { validateLevel } from "@/lib/level";
@@ -19,7 +20,8 @@ export default function Home() {
   });
 
   return (
-    <main className="flex min-h-dvh flex-col items-center gap-8 bg-gradient-to-b from-slate-950 via-slate-950 to-emerald-950/40 px-4 py-10 text-slate-100 sm:gap-10">
+    <main className="flex min-h-dvh flex-col items-center gap-8 px-4 py-10 text-slate-100 sm:gap-10">
+      <ShaderBackground />
       <div className="anim-rise flex max-w-2xl flex-col items-center gap-3 text-center sm:gap-4">
         <p className="text-teal-400">
           <CameraIcon size={56} />

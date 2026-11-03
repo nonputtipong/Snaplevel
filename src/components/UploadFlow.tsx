@@ -179,7 +179,13 @@ export default function UploadFlow({
                       : "bg-slate-700"
                 }`}
               />
-              <p className={done || active ? "text-slate-100" : "text-slate-500"}>
+              <p
+                className={
+                  done || active
+                    ? "text-slate-100 progress-shine"
+                    : "text-slate-500"
+                }
+              >
                 {stepLabel(progress, step)}
               </p>
             </div>
