@@ -1,8 +1,12 @@
 import { expect, test } from "bun:test";
 import {
   createRescueState,
+  emitRescue,
+  emitRescueEnd,
   findFreeSpot,
   nextRescueState,
+  onRescue,
+  onRescueEnd,
   pointInPolygon,
   type RescueSample,
 } from "./rescue";
@@ -105,6 +109,23 @@ test("below the kill line the fall respawn owns recovery, not rescue", () => {
     sample({ hasContact: false, aboveKillLine: false }),
   );
   expect(next.rescue).toBe(false);
+});
+
+test("rescue listeners receive fire and end until unsubscribed", () => {
+  const seen: string[] = [];
+  const offFire = onRescue((info) => {
+    seen.push(`fire#${info.streak}`);
+  });
+  const offEnd = onRescueEnd(() => {
+    seen.push("end");
+  });
+  const info = { at: 1, x: 2, y: 3, parts: ["a"], streak: 1 };
+  emitRescue(info);
+  emitRescueEnd(info);
+  offFire();
+  offEnd();
+  emitRescue({ ...info, at: 2, streak: 2 });
+  expect(seen).toEqual(["fire#1", "end"]);
 });
 
 test("findFreeSpot returns the start when it is free", () => {

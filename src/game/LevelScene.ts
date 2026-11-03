@@ -13,9 +13,12 @@ import {
 import { resolveFrameInput } from "./frameInput";
 import {
   createRescueState,
+  emitRescue,
+  emitRescueEnd,
   findFreeSpot,
   nextRescueState,
   pointInPolygon,
+  type RescueInfo,
   type RescueState,
 } from "./rescue";
 import { playSfx } from "./sfx";
@@ -70,7 +73,11 @@ export class LevelScene extends Phaser.Scene {
   private dust?: Phaser.GameObjects.Particles.ParticleEmitter;
   private confetti?: Phaser.GameObjects.Particles.ParticleEmitter;
   private solidParts: Point[][] = [];
+  private solidPartIds: string[] = [];
   private rescueState: RescueState = createRescueState();
+  private rescueStreak = 0;
+  private rescueLastAt = 0;
+  private rescuePending: RescueInfo | null = null;
 
   constructor(level: Level, callbacks: LevelSceneCallbacks) {
     super("level");
@@ -95,7 +102,10 @@ export class LevelScene extends Phaser.Scene {
     resetJump(this.jumpState);
     this.roleById = new Map(this.level.objects.map((o) => [o.id, o.role]));
     this.solidParts = [];
+    this.solidPartIds = [];
     this.rescueState = createRescueState();
+    this.rescueStreak = 0;
+    this.rescuePending = null;
     this.won = false;
     this.debugOn = false;
 
@@ -134,6 +144,7 @@ export class LevelScene extends Phaser.Scene {
       const kind = object.role === "hazard" ? "hazard" : "solid";
       if (!options.isSensor) {
         this.solidParts.push(...object.parts);
+        this.solidPartIds.push(...object.parts.map(() => object.id));
       }
       for (const part of object.parts) {
         this.addStaticPart(part, `${kind}:${object.id}`, options);
@@ -380,6 +391,7 @@ export class LevelScene extends Phaser.Scene {
     this.groundSolids.clear();
     resetJump(this.jumpState);
     this.rescueState = createRescueState();
+    this.rescuePending = null;
     playSfx("respawn");
     this.dust?.explode(8, x, y);
     this.player.setAlpha(0.25);
@@ -466,11 +478,20 @@ export class LevelScene extends Phaser.Scene {
   }
 
   private maybeRescue(player: Phaser.Physics.Matter.Image): void {
+    const now = this.time.now;
+    const pending = this.rescuePending;
+    if (
+      pending &&
+      (this.groundSolids.size > 0 || now >= this.rescueState.cooldownUntil)
+    ) {
+      this.rescuePending = null;
+      emitRescueEnd(pending);
+    }
     const decision = nextRescueState(this.rescueState, {
       embedded: this.isEmbedded(player.x, player.y),
       hasContact: this.groundSolids.size > 0,
       aboveKillLine: player.y <= this.level.height + 60,
-      now: this.time.now,
+      now,
     });
     this.rescueState = decision.state;
     if (decision.bonk && (player.body?.velocity.y ?? 0) < 0) {
@@ -479,6 +500,17 @@ export class LevelScene extends Phaser.Scene {
     if (!decision.rescue) {
       return;
     }
+    this.rescueStreak = now - this.rescueLastAt < 1000 ? this.rescueStreak + 1 : 1;
+    this.rescueLastAt = now;
+    const info: RescueInfo = {
+      at: Math.round(now),
+      x: Math.round(player.x),
+      y: Math.round(player.y),
+      parts: this.embeddedParts(player.x, player.y),
+      streak: this.rescueStreak,
+    };
+    this.rescuePending = info;
+    emitRescue(info);
     const spot = findFreeSpot(player.x, player.y, (x, y) =>
       this.isEmbedded(x, y),
     ) ?? { x: player.x, y: player.y - 120 };
@@ -500,6 +532,21 @@ export class LevelScene extends Phaser.Scene {
       return true;
     }
     return this.solidParts.some((part) => pointInPolygon(part, x, y));
+  }
+
+  /** Ids of the solid parts containing a point (branch-debug rescue log). */
+  private embeddedParts(x: number, y: number): string[] {
+    const { width, height } = this.level;
+    const ids: string[] = [];
+    if (x >= 0 && x <= width && y >= height - 8 && y <= height) {
+      ids.push("floor");
+    }
+    this.solidParts.forEach((part, i) => {
+      if (pointInPolygon(part, x, y)) {
+        ids.push(this.solidPartIds[i] ?? "?");
+      }
+    });
+    return ids;
   }
 
   /** Public outline toggle for the HUD button (touch has no D key). */

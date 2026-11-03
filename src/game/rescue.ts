@@ -73,6 +73,48 @@ export function nextRescueState(
   return { state: idle, rescue: false, bonk: sample.embedded };
 }
 
+export interface RescueInfo {
+  at: number;
+  x: number;
+  y: number;
+  parts: string[];
+  /** Consecutive rescue fires including this one. */
+  streak: number;
+}
+
+type RescueListener = (info: RescueInfo) => void;
+
+const rescueListeners = new Set<RescueListener>();
+const rescueEndListeners = new Set<RescueListener>();
+
+/** Branch-debug hooks for the input logger; nothing else subscribes. */
+export function onRescue(listener: RescueListener): () => void {
+  rescueListeners.add(listener);
+  return () => {
+    rescueListeners.delete(listener);
+  };
+}
+
+export function onRescueEnd(listener: RescueListener): () => void {
+  rescueEndListeners.add(listener);
+  return () => {
+    rescueEndListeners.delete(listener);
+  };
+}
+
+/** Called by the scene when a rescue fires / resolves. */
+export function emitRescue(info: RescueInfo): void {
+  for (const listener of rescueListeners) {
+    listener(info);
+  }
+}
+
+export function emitRescueEnd(info: RescueInfo): void {
+  for (const listener of rescueEndListeners) {
+    listener(info);
+  }
+}
+
 const RING: Array<[number, number]> = [
   [0, 0],
   [0, -40],

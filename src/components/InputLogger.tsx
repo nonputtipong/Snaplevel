@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { jumpSnapshot, onJumpEvent } from "@/game/jumpInput";
+import { onRescue, onRescueEnd } from "@/game/rescue";
 import { onTouchClear, touchInput } from "@/game/touchInput";
 
 interface Entry {
@@ -101,6 +102,16 @@ export default function InputLogger() {
     const unsubClear = onTouchClear((info) => {
       push("jump:hold-clear", info.scope, `${info.pointerId ?? "-"}`);
     });
+    const unsubRescue = onRescue((info) => {
+      push(
+        `rescue:fire#${info.streak}`,
+        `${info.x},${info.y}`,
+        info.parts.join(",") || "-",
+      );
+    });
+    const unsubRescueEnd = onRescueEnd((info) => {
+      push("rescue:end", `${info.x},${info.y}`, `streak${info.streak}@${info.at}`);
+    });
     const stateTimer = window.setInterval(() => {
       if (!touchInput.jumpHeld) {
         return;
@@ -132,6 +143,8 @@ export default function InputLogger() {
     return () => {
       unsubJump();
       unsubClear();
+      unsubRescue();
+      unsubRescueEnd();
       window.clearInterval(stateTimer);
       window.removeEventListener("pointerleave", onCapture as EventListener, true);
       window.removeEventListener("lostpointercapture", onCapture as EventListener, true);
