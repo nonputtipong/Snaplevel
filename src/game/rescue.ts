@@ -7,26 +7,70 @@ export interface RescueSample {
   hasContact: boolean;
   /** Above the fall-respawn line (below it, respawn owns recovery). */
   aboveKillLine: boolean;
+  /** Scene clock (ms) for the post-rescue cooldown. */
+  now: number;
 }
 
 export interface RescueState {
   airFrames: number;
+  embedFrames: number;
+  cooldownUntil: number;
+}
+
+export function createRescueState(): RescueState {
+  return { airFrames: 0, embedFrames: 0, cooldownUntil: 0 };
 }
 
 const AIR_FRAME_LIMIT = 180;
+/** Consecutive embedded frames before teleporting; briefer embeds bonk. */
+const EMBED_FRAME_LIMIT = 10;
+/** No rescue within this long after a rescue fire. */
+const RESCUE_COOLDOWN_MS = 500;
+
+export interface RescueDecision {
+  state: RescueState;
+  rescue: boolean;
+  /** Embedded but inside the grace window: zero upward velocity only. */
+  bonk: boolean;
+}
 
 export function nextRescueState(
   prev: RescueState,
   sample: RescueSample,
-): { state: RescueState; rescue: boolean } {
-  if (sample.embedded && sample.aboveKillLine) {
-    return { state: { airFrames: 0 }, rescue: true };
-  }
+): RescueDecision {
+  const embedFrames = sample.embedded ? prev.embedFrames + 1 : 0;
   const airFrames = sample.hasContact ? 0 : prev.airFrames + 1;
-  return {
-    state: { airFrames },
-    rescue: airFrames >= AIR_FRAME_LIMIT && sample.aboveKillLine,
+  const idle: RescueState = {
+    airFrames,
+    embedFrames,
+    cooldownUntil: prev.cooldownUntil,
   };
+  if (!sample.aboveKillLine || sample.now < prev.cooldownUntil) {
+    return { state: idle, rescue: false, bonk: false };
+  }
+  if (sample.embedded && embedFrames >= EMBED_FRAME_LIMIT) {
+    return {
+      state: {
+        airFrames: 0,
+        embedFrames: 0,
+        cooldownUntil: sample.now + RESCUE_COOLDOWN_MS,
+      },
+      rescue: true,
+      bonk: false,
+    };
+  }
+  if (airFrames >= AIR_FRAME_LIMIT) {
+    return {
+      state: {
+        airFrames: 0,
+        embedFrames: 0,
+        cooldownUntil: sample.now + RESCUE_COOLDOWN_MS,
+      },
+      rescue: true,
+      bonk: false,
+    };
+  }
+  return { state: idle, rescue: false, bonk: sample.embedded };
 }
 
 const RING: Array<[number, number]> = [
