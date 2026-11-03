@@ -431,14 +431,35 @@ export class LevelScene extends Phaser.Scene {
    * trigger's horizontal span, so anything visibly touching it wins. */
   private drawPortal(gx: number, gy: number, gr: number): void {
     const w = 1.4 * gr;
-    const h = 2.4 * gr;
+    const h = 3 * gr;
     const cx = gx;
     const cy = gy + gr - h / 2;
     this.portalCalm =
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Halo: soft radial glow behind the portal (concentric fading discs).
+    const halo = this.add.graphics();
+    const HR = 3 * gr;
+    for (let i = 5; i >= 1; i -= 1) {
+      halo.fillStyle(GOAL_COLOR, 0.05 + 0.02 * (5 - i));
+      halo.fillCircle(cx, cy, (HR * i) / 5);
+    }
+    // Beam: fading column from the portal top toward the level top.
+    const beamTop = Math.max(0, cy - h / 2 - 8 * gr);
+    const beamH = cy - h / 2 - beamTop;
+    const beam = this.add.graphics();
+    // Normal blend, not additive: additive light is invisible against the
+    // bright walls and leaves these levels have.
+    const SEGS = 6;
+    for (let i = 0; i < SEGS; i += 1) {
+      const t0 = i / SEGS;
+      const y0 = cy - h / 2 - beamH * t0;
+      const y1 = cy - h / 2 - beamH * ((i + 1) / SEGS);
+      beam.fillStyle(GOAL_COLOR, 0.3 * (1 - t0));
+      beam.fillRect(cx - w / 2, y1, w, y0 - y1);
+      beam.fillStyle(0xd9fbff, 0.35 * (1 - t0));
+      beam.fillRect(cx - w * 0.18, y1, w * 0.36, y0 - y1);
+    }
     const gfx = this.add.graphics();
-    gfx.fillStyle(GOAL_COLOR, 0.16);
-    gfx.fillEllipse(0, 0, w * 1.6, h * 1.1);
     gfx.fillStyle(0x0b3b46, 0.94);
     gfx.fillEllipse(0, 0, w, h);
     gfx.fillStyle(0xd9fbff, 0.85);
@@ -461,6 +482,23 @@ export class LevelScene extends Phaser.Scene {
     if (this.portalCalm) {
       return;
     }
+    // Start ping: two expanding rings from the portal, once per start.
+    // drawPortal runs from create(), so restarts ping and respawns don't.
+    for (const delay of [0, 380]) {
+      const ring = this.add.graphics();
+      ring.setPosition(cx, cy);
+      ring.lineStyle(Math.max(2, gr * 0.1), GOAL_COLOR, 0.9);
+      ring.strokeCircle(0, 0, gr);
+      this.tweens.add({
+        targets: ring,
+        scaleX: 6,
+        scaleY: 6,
+        alpha: 0,
+        duration: 1200,
+        delay,
+        onComplete: () => ring.destroy(),
+      });
+    }
     this.tweens.add({
       targets: portal,
       scaleX: 1.04,
@@ -475,6 +513,22 @@ export class LevelScene extends Phaser.Scene {
       angle: 360,
       duration: 5200,
       repeat: -1,
+    });
+    this.tweens.add({
+      targets: halo,
+      alpha: 0.6,
+      duration: 1600,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
+    this.tweens.add({
+      targets: beam,
+      alpha: 0.7,
+      duration: 1300,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
     });
     this.portalSparks = this.add.particles(cx, cy + h * 0.25, "sl-dot", {
       speedX: { min: -10, max: 10 },
