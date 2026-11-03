@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { onJumpEvent } from "@/game/jumpInput";
+import { jumpSnapshot, onJumpEvent } from "@/game/jumpInput";
+import { onTouchClear, touchInput } from "@/game/touchInput";
 
 interface Entry {
   t: number;
@@ -97,8 +98,46 @@ export default function InputLogger() {
         `${event.at}`,
       );
     });
+    const unsubClear = onTouchClear((info) => {
+      push("jump:hold-clear", info.scope, `${info.pointerId ?? "-"}`);
+    });
+    const stateTimer = window.setInterval(() => {
+      if (!touchInput.jumpHeld) {
+        return;
+      }
+      const s = jumpSnapshot();
+      if (!s) {
+        return;
+      }
+      push(
+        "jump:state",
+        `${s.grounded ? "g" : "a"}${s.sleeping ? "Z" : ""}`,
+        `vy${s.vy} y${s.y} ${s.held ? "h" : "!h"}${s.armed ? " armed" : ""} b${s.bufferMs} c${s.coyoteMs}`,
+      );
+    }, 250);
+    const onCapture = (event: Event) => {
+      push(event.type, "-", labelOf(event.target));
+    };
+    const onBlur = () => push("blur", "-", "-");
+    const onVis = () => {
+      if (document.hidden) {
+        push("visibilitychange", "-", "hidden");
+      }
+    };
+    window.addEventListener("pointerleave", onCapture as EventListener, true);
+    window.addEventListener("lostpointercapture", onCapture as EventListener, true);
+    window.addEventListener("blur", onBlur);
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("contextmenu", onCapture as EventListener, opts);
     return () => {
       unsubJump();
+      unsubClear();
+      window.clearInterval(stateTimer);
+      window.removeEventListener("pointerleave", onCapture as EventListener, true);
+      window.removeEventListener("lostpointercapture", onCapture as EventListener, true);
+      window.removeEventListener("blur", onBlur);
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("contextmenu", onCapture as EventListener, opts);
       for (const type of ["pointerdown", "pointerup", "pointercancel"]) {
         window.removeEventListener(type, onPointer as EventListener, opts);
       }
