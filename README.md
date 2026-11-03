@@ -1,6 +1,6 @@
 # Snaplevel
 
-Photograph anything — a desk, a room, a street corner — and get a playable 2D platformer level in about a minute.
+Photograph anything — a desk, a room, a street corner — and get a playable 2D platformer level in under a minute.
 
 Live site: [https://snaplevel.vercel.app](https://snaplevel.vercel.app)
 
