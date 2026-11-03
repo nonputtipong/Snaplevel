@@ -33,30 +33,6 @@ export function releasePointer(pointerId: number): void {
   });
   jumpHolders.delete(pointerId);
   touchInput.jumpHeld = jumpHolders.size > 0;
-  emitTouchClear({ scope: "pointer", pointerId });
-}
-
-export interface TouchClearInfo {
-  scope: "pointer" | "all";
-  pointerId?: number;
-}
-
-type TouchClearListener = (info: TouchClearInfo) => void;
-
-const clearListeners = new Set<TouchClearListener>();
-
-/** Branch-debug hook for the input logger; nothing else subscribes. */
-export function onTouchClear(listener: TouchClearListener): () => void {
-  clearListeners.add(listener);
-  return () => {
-    clearListeners.delete(listener);
-  };
-}
-
-function emitTouchClear(info: TouchClearInfo): void {
-  for (const listener of clearListeners) {
-    listener(info);
-  }
 }
 
 const jumpHolders = new Set<number>();
@@ -96,5 +72,4 @@ export function releaseTouch(): void {
   touchInput.right = false;
   touchInput.jumpQueued = false;
   touchInput.jumpHeld = false;
-  emitTouchClear({ scope: "all" });
 }

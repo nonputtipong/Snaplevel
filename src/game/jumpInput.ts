@@ -32,43 +32,6 @@ export function resetJump(state: JumpState): void {
   state.lastJumpAt = -REPEAT_GAP_MS;
 }
 
-export interface JumpSnapshot {
-  at: number;
-  grounded: boolean;
-  vy: number;
-  held: boolean;
-  /** True when a held repeat would fire right now. */
-  armed: boolean;
-  bufferMs: number;
-  coyoteMs: number;
-  y: number;
-  sleeping: boolean;
-}
-
-export interface JumpInfo {
-  y?: number;
-  sleeping?: boolean;
-}
-
-let snapshot: JumpSnapshot | null = null;
-
-/** Latest per-frame inputs, for the branch-only input logger. */
-export function jumpSnapshot(): JumpSnapshot | null {
-  return snapshot;
-}
-
-type JumpListener = (event: JumpEvent) => void;
-
-const listeners = new Set<JumpListener>();
-
-/** Branch-debug hook for the input logger; nothing else subscribes. */
-export function onJumpEvent(listener: JumpListener): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
 export interface JumpResolution {
   jump: boolean;
   events: JumpEvent[];
@@ -88,7 +51,6 @@ export function updateJump(
   held: boolean,
   grounded: boolean,
   vy: number,
-  info: JumpInfo = {},
 ): JumpResolution {
   const events: JumpEvent[] = [];
   if (grounded) {
@@ -102,17 +64,6 @@ export function updateJump(
   const canJump = (grounded || now <= state.coyoteUntil) && !rising;
   const gapOk = now - state.lastJumpAt >= REPEAT_GAP_MS;
   const want = now <= state.bufferUntil || held;
-  snapshot = {
-    at: now,
-    grounded,
-    vy: Math.round(vy),
-    held,
-    armed: held && canJump && gapOk,
-    bufferMs: Math.max(0, Math.round(state.bufferUntil - now)),
-    coyoteMs: Math.max(0, Math.round(state.coyoteUntil - now)),
-    y: Math.round(info.y ?? 0),
-    sleeping: info.sleeping ?? false,
-  };
   let jump = false;
   if (want && canJump && gapOk) {
     jump = true;
@@ -134,11 +85,6 @@ export function updateJump(
     // Bounded: only the frames where contact outlasts takeoff. Silent
     // otherwise (airborne held is normal; gap pacing is by design).
     events.push({ type: "deny", at: now, grounded, reason: "rising" });
-  }
-  for (const event of events) {
-    for (const listener of listeners) {
-      listener(event);
-    }
   }
   return { jump, events };
 }
