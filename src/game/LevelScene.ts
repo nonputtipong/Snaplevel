@@ -231,6 +231,11 @@ export class LevelScene extends Phaser.Scene {
       pressed,
       held,
       this.groundSolids.size > 0,
+      player.body?.velocity.y ?? 0,
+      {
+        y: player.y,
+        sleeping: (player.body as { isSleeping?: boolean } | null)?.isSleeping ?? false,
+      },
     );
     const frame = resolveFrameInput({
       moveLeft:
