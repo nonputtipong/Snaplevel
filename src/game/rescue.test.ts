@@ -1,44 +1,84 @@
 import { expect, test } from "bun:test";
 import {
+  createRescueState,
   findFreeSpot,
   nextRescueState,
   pointInPolygon,
   type RescueSample,
 } from "./rescue";
 
-const WALL_HOLD: RescueSample = {
-  embedded: false,
-  hasContact: true,
-  aboveKillLine: true,
-};
+function sample(over: Partial<RescueSample> = {}): RescueSample {
+  return {
+    embedded: false,
+    hasContact: true,
+    aboveKillLine: true,
+    now: 0,
+    ...over,
+  };
+}
 
 test("holding against a wall for 5 s never rescues", () => {
-  let state = { airFrames: 0 };
+  let state = createRescueState();
   for (let frame = 0; frame < 300; frame += 1) {
-    const next = nextRescueState(state, WALL_HOLD);
+    const next = nextRescueState(state, sample({ now: frame * 16 }));
     expect(next.rescue).toBe(false);
+    expect(next.bonk).toBe(false);
     state = next.state;
   }
   expect(state.airFrames).toBe(0);
 });
 
-test("an embedded spawn rescues immediately", () => {
-  const next = nextRescueState(
-    { airFrames: 0 },
-    { embedded: true, hasContact: true, aboveKillLine: true },
+test("an embedded spawn bonks first, then rescues", () => {
+  let state = createRescueState();
+  for (let frame = 0; frame < 9; frame += 1) {
+    const next = nextRescueState(
+      state,
+      sample({ embedded: true, now: frame * 16 }),
+    );
+    expect(next.rescue).toBe(false);
+    expect(next.bonk).toBe(true);
+    state = next.state;
+  }
+  const tenth = nextRescueState(state, sample({ embedded: true, now: 160 }));
+  expect(tenth.rescue).toBe(true);
+  expect(tenth.bonk).toBe(false);
+});
+
+test("a brief embed never teleports", () => {
+  let state = createRescueState();
+  for (let frame = 0; frame < 5; frame += 1) {
+    state = nextRescueState(state, sample({ embedded: true, now: frame * 16 })).state;
+  }
+  const next = nextRescueState(state, sample({ now: 100 }));
+  expect(next.rescue).toBe(false);
+  expect(next.bonk).toBe(false);
+});
+
+test("cooldown blocks a rescue right after a rescue", () => {
+  let state = createRescueState();
+  for (let frame = 0; frame < 9; frame += 1) {
+    state = nextRescueState(
+      state,
+      sample({ embedded: true, now: frame * 16 }),
+    ).state;
+  }
+  const fired = nextRescueState(state, sample({ embedded: true, now: 144 }));
+  expect(fired.rescue).toBe(true);
+  const again = nextRescueState(
+    fired.state,
+    sample({ embedded: true, now: 200 }),
   );
-  expect(next.rescue).toBe(true);
+  expect(again.rescue).toBe(false);
 });
 
 test("180 frames with no solid contact rescues", () => {
-  let state = { airFrames: 0 };
+  let state = createRescueState();
   let rescuedAt = -1;
   for (let frame = 0; frame < 300; frame += 1) {
-    const next = nextRescueState(state, {
-      embedded: false,
-      hasContact: false,
-      aboveKillLine: true,
-    });
+    const next = nextRescueState(
+      state,
+      sample({ hasContact: false, now: frame * 16 }),
+    );
     if (next.rescue && rescuedAt < 0) {
       rescuedAt = frame;
     }
@@ -48,22 +88,21 @@ test("180 frames with no solid contact rescues", () => {
 });
 
 test("contact resets the air counter", () => {
-  let state = { airFrames: 0 };
+  let state = createRescueState();
   for (let frame = 0; frame < 100; frame += 1) {
-    state = nextRescueState(state, {
-      embedded: false,
-      hasContact: false,
-      aboveKillLine: true,
-    }).state;
+    state = nextRescueState(
+      state,
+      sample({ hasContact: false, now: frame * 16 }),
+    ).state;
   }
-  state = nextRescueState(state, WALL_HOLD).state;
+  state = nextRescueState(state, sample({ now: 1600 })).state;
   expect(state.airFrames).toBe(0);
 });
 
 test("below the kill line the fall respawn owns recovery, not rescue", () => {
   const next = nextRescueState(
-    { airFrames: 999 },
-    { embedded: false, hasContact: false, aboveKillLine: false },
+    { airFrames: 999, embedFrames: 999, cooldownUntil: 0 },
+    sample({ hasContact: false, aboveKillLine: false }),
   );
   expect(next.rescue).toBe(false);
 });

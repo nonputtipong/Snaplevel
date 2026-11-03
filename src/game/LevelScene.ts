@@ -12,6 +12,7 @@ import {
 } from "./jumpInput";
 import { resolveFrameInput } from "./frameInput";
 import {
+  createRescueState,
   findFreeSpot,
   nextRescueState,
   pointInPolygon,
@@ -69,7 +70,7 @@ export class LevelScene extends Phaser.Scene {
   private dust?: Phaser.GameObjects.Particles.ParticleEmitter;
   private confetti?: Phaser.GameObjects.Particles.ParticleEmitter;
   private solidParts: Point[][] = [];
-  private rescueState: RescueState = { airFrames: 0 };
+  private rescueState: RescueState = createRescueState();
 
   constructor(level: Level, callbacks: LevelSceneCallbacks) {
     super("level");
@@ -94,7 +95,7 @@ export class LevelScene extends Phaser.Scene {
     resetJump(this.jumpState);
     this.roleById = new Map(this.level.objects.map((o) => [o.id, o.role]));
     this.solidParts = [];
-    this.rescueState = { airFrames: 0 };
+    this.rescueState = createRescueState();
     this.won = false;
     this.debugOn = false;
 
@@ -378,7 +379,7 @@ export class LevelScene extends Phaser.Scene {
     this.player.setVelocity(0, 0);
     this.groundSolids.clear();
     resetJump(this.jumpState);
-    this.rescueState = { airFrames: 0 };
+    this.rescueState = createRescueState();
     playSfx("respawn");
     this.dust?.explode(8, x, y);
     this.player.setAlpha(0.25);
@@ -469,8 +470,12 @@ export class LevelScene extends Phaser.Scene {
       embedded: this.isEmbedded(player.x, player.y),
       hasContact: this.groundSolids.size > 0,
       aboveKillLine: player.y <= this.level.height + 60,
+      now: this.time.now,
     });
     this.rescueState = decision.state;
+    if (decision.bonk && (player.body?.velocity.y ?? 0) < 0) {
+      player.setVelocityY(0);
+    }
     if (!decision.rescue) {
       return;
     }
