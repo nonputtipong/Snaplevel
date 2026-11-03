@@ -41,7 +41,7 @@ export default function AuroraBackground() {
           style={{ background: blob.background }}
         />
       ))}
-      <div className="absolute inset-0 bg-slate-950/60" />
+      <div className="absolute inset-0 bg-slate-950/45" />
     </div>
   );
 }
