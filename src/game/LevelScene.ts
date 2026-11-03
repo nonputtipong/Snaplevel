@@ -10,6 +10,7 @@ import {
   updateJump,
   type JumpState,
 } from "./jumpInput";
+import { groundContactLabel } from "./contacts";
 import { resolveFrameInput } from "./frameInput";
 import {
   createRescueState,
@@ -188,6 +189,23 @@ export class LevelScene extends Phaser.Scene {
         }
       },
     );
+    // A teleport/respawn clears our contact set while the engine pair stays
+    // alive, so no new collisionstart fires. Re-add still-active solids
+    // every step; collisionend still owns deletion.
+    this.matter.world.on(
+      "collisionactive",
+      (event: { pairs: CollisionPair[] }) => {
+        for (const pair of event.pairs) {
+          const solid = groundContactLabel(
+            pair.bodyA.label,
+            pair.bodyB.label,
+          );
+          if (solid) {
+            this.groundSolids.add(solid);
+          }
+        }
+      },
+    );
 
     const keyboard = this.input.keyboard;
     if (keyboard) {
@@ -327,14 +345,15 @@ export class LevelScene extends Phaser.Scene {
       }
       return;
     }
-    if (other.startsWith("solid:")) {
+    const solid = groundContactLabel(labelA, labelB);
+    if (solid) {
       if (started) {
-        this.groundSolids.add(other);
-        if (this.roleById.get(other.slice("solid:".length)) === "bouncy") {
+        this.groundSolids.add(solid);
+        if (this.roleById.get(solid.slice("solid:".length)) === "bouncy") {
           this.bounceEffect();
         }
       } else {
-        this.groundSolids.delete(other);
+        this.groundSolids.delete(solid);
       }
     }
   }
