@@ -70,6 +70,9 @@ export class LevelScene extends Phaser.Scene {
   private debugLabels: Phaser.GameObjects.Text[] = [];
   private dust?: Phaser.GameObjects.Particles.ParticleEmitter;
   private confetti?: Phaser.GameObjects.Particles.ParticleEmitter;
+  private portal?: Phaser.GameObjects.Container;
+  private portalSparks?: Phaser.GameObjects.Particles.ParticleEmitter;
+  private portalCalm = false;
   private solidParts: Point[][] = [];
   private rescueState: RescueState = createRescueState();
 
@@ -155,11 +158,7 @@ export class LevelScene extends Phaser.Scene {
       isSensor: true,
       label: "goal",
     });
-    const goalGfx = this.add.graphics();
-    goalGfx.lineStyle(4, GOAL_COLOR);
-    goalGfx.strokeCircle(gx, gy, gr);
-    goalGfx.fillStyle(GOAL_COLOR, 0.9);
-    goalGfx.fillCircle(gx, gy, gr * 0.35);
+    this.drawPortal(gx, gy, gr);
 
     const { pw, ph } = playerSize(width, height);
     const [sx, sy] = this.level.start;
@@ -413,7 +412,81 @@ export class LevelScene extends Phaser.Scene {
     const [gx, gy] = this.level.goal;
     this.confetti?.explode(36, gx, gy);
     this.cameras.main.flash(250, 255, 255, 255);
+    if (!this.portalCalm && this.portal) {
+      this.portalSparks?.explode(14, gx, gy);
+      this.tweens.add({
+        targets: this.portal,
+        scaleX: 1.3,
+        scaleY: 1.3,
+        duration: 150,
+        yoyo: true,
+      });
+    }
     this.callbacks.onWin();
+  }
+
+  /** Portal doorway over the goal trigger. Visual only: the sensor circle
+   * (same center, radius, label) is created at the call site and untouched.
+   * The oval stands on the trigger's bottom edge and stays inside the
+   * trigger's horizontal span, so anything visibly touching it wins. */
+  private drawPortal(gx: number, gy: number, gr: number): void {
+    const w = 1.4 * gr;
+    const h = 2.4 * gr;
+    const cx = gx;
+    const cy = gy + gr - h / 2;
+    this.portalCalm =
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const gfx = this.add.graphics();
+    gfx.fillStyle(GOAL_COLOR, 0.16);
+    gfx.fillEllipse(0, 0, w * 1.6, h * 1.1);
+    gfx.fillStyle(0x0b3b46, 0.94);
+    gfx.fillEllipse(0, 0, w, h);
+    gfx.fillStyle(0xd9fbff, 0.85);
+    gfx.fillEllipse(0, 0, w * 0.46, h * 0.62);
+    gfx.lineStyle(Math.max(2, gr * 0.12), GOAL_COLOR, 1);
+    gfx.strokeEllipse(0, 0, w, h);
+    gfx.lineStyle(Math.max(1, gr * 0.06), 0xd9fbff, 0.9);
+    gfx.strokeEllipse(0, 0, w * 0.68, h * 0.8);
+    const swirl = this.add.graphics();
+    swirl.lineStyle(Math.max(2, gr * 0.09), 0xffffff, 0.9);
+    const sr = w * 0.3;
+    swirl.beginPath();
+    swirl.arc(0, 0, sr, 0.3, Math.PI - 0.3, false);
+    swirl.strokePath();
+    swirl.beginPath();
+    swirl.arc(0, 0, sr, Math.PI + 0.3, Math.PI * 2 - 0.3, false);
+    swirl.strokePath();
+    const portal = this.add.container(cx, cy, [gfx, swirl]);
+    this.portal = portal;
+    if (this.portalCalm) {
+      return;
+    }
+    this.tweens.add({
+      targets: portal,
+      scaleX: 1.04,
+      scaleY: 1.04,
+      duration: 1100,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut",
+    });
+    this.tweens.add({
+      targets: swirl,
+      angle: 360,
+      duration: 5200,
+      repeat: -1,
+    });
+    this.portalSparks = this.add.particles(cx, cy + h * 0.25, "sl-dot", {
+      speedX: { min: -10, max: 10 },
+      speedY: { min: -46, max: -18 },
+      lifespan: 900,
+      frequency: 380,
+      quantity: 1,
+      scale: { start: 0.55, end: 0 },
+      alpha: { start: 0.9, end: 0 },
+      tint: [0x22d3ee, 0xd9fbff, 0x5eead4],
+    });
+    this.portalSparks.setDepth(8);
   }
 
   private drawLevelArt(): void {
