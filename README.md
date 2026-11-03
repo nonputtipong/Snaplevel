@@ -70,6 +70,12 @@ Other commands: `bun test`, `bun run build`.
 - Photos are sent to Meta's Model API for processing. Snaplevel calls Meta's Model API in standard mode, in which content is not used to train Meta's models (see [Meta's terms](https://dev.meta.ai/legal/terms-of-service)).
 - Client IPs are read from forwarding headers on a best-effort basis and kept only in the in-memory rate-limit counters, which are lost when the server restarts.
 
+## Built during the hackathon
+
+- Solo entry, Indie Developer track; event window Oct 26 – Nov 4 2026 (first commit in this repo: Oct 29 2026).
+- Meta tools used: Muse Spark (`muse-spark-1.3`, standard mode) for object listing and roles, and SAM 3.1 (`sam-3.1`) for segmentation; all model calls are server-side.
+- The three example scenes are AI-generated images (see Credits), so the instant-play demo runs with zero API calls.
+
 ## Credits and licence
 
 - Example scenes are AI-generated (ChatGPT image generation), not photographs of real places or people.
