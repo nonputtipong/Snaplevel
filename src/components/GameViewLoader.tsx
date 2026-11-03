@@ -8,6 +8,12 @@ const GameView = dynamic(() => import("./GameView"), {
   loading: () => <p className="text-slate-400">Loading game…</p>,
 });
 
-export default function GameViewLoader({ level }: { level: Level }) {
-  return <GameView level={level} />;
+export default function GameViewLoader({
+  level,
+  onNewPhoto,
+}: {
+  level: Level;
+  onNewPhoto?: () => void;
+}) {
+  return <GameView level={level} onNewPhoto={onNewPhoto} />;
 }

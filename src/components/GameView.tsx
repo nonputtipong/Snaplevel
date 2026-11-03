@@ -37,7 +37,15 @@ const CONFETTI = [
 const HUD_BUTTON =
   "inline-flex min-h-[44px] touch-manipulation items-center justify-center gap-1.5 rounded-full bg-slate-800/80 px-3 py-1.5 text-sm text-slate-100 transition-all duration-150 select-none hover:bg-slate-700 motion-safe:hover:-translate-y-0.5 active:bg-slate-600 motion-safe:active:translate-y-0 motion-safe:active:scale-95";
 
-export default function GameView({ level }: { level: Level }) {
+export default function GameView({
+  level,
+  onNewPhoto,
+}: {
+  level: Level;
+  /** When set, New photo controls reset the embedding flow instead of
+   * linking home (same-URL links are a no-op inside UploadFlow). */
+  onNewPhoto?: () => void;
+}) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<LevelScene | null>(null);
   const [won, setWon] = useState(false);
@@ -114,14 +122,26 @@ export default function GameView({ level }: { level: Level }) {
         >
           <RestartIcon /> Restart
         </button>
-        <Link
-          href="/"
-          title="Back to upload a new photo"
-          aria-label="New photo"
-          className={HUD_BUTTON}
-        >
-          <PlusIcon /> New photo
-        </Link>
+        {onNewPhoto ? (
+          <button
+            type="button"
+            onClick={onNewPhoto}
+            title="Back to upload a new photo"
+            aria-label="New photo"
+            className={HUD_BUTTON}
+          >
+            <PlusIcon /> New photo
+          </button>
+        ) : (
+          <Link
+            href="/"
+            title="Back to upload a new photo"
+            aria-label="New photo"
+            className={HUD_BUTTON}
+          >
+            <PlusIcon /> New photo
+          </Link>
+        )}
         <button
           type="button"
           onClick={() => sceneRef.current?.toggleOutlines()}
@@ -179,12 +199,24 @@ export default function GameView({ level }: { level: Level }) {
               >
                 Play again
               </button>
-              <Link
-                href="/"
-                className="rounded-full border border-slate-600 px-5 py-2 font-medium text-slate-100 hover:bg-slate-800"
-              >
-                New photo
-              </Link>
+              {onNewPhoto ? (
+                <button
+                  type="button"
+                  onClick={onNewPhoto}
+                  aria-label="New photo"
+                  className="inline-flex min-h-[44px] touch-manipulation items-center rounded-full border border-slate-600 px-5 py-2 font-medium text-slate-100 hover:bg-slate-800"
+                >
+                  New photo
+                </button>
+              ) : (
+                <Link
+                  href="/"
+                  aria-label="New photo"
+                  className="inline-flex min-h-[44px] touch-manipulation items-center rounded-full border border-slate-600 px-5 py-2 font-medium text-slate-100 hover:bg-slate-800"
+                >
+                  New photo
+                </Link>
+              )}
             </div>
           </div>
         </div>

@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react";
 import GameViewLoader from "./GameViewLoader";
-import { PlusIcon } from "./icons";
 import { checkUpload, makeSamplePhoto, resizeImage } from "@/lib/image";
 import {
   SAMPLE_FIXTURE_NOTE,
@@ -92,16 +91,13 @@ export default function UploadFlow({
   };
 
   if (state.name === "done") {
+    const newPhoto = () => {
+      reset();
+      window.scrollTo(0, 0);
+    };
     return (
       <div className="flex w-full flex-col items-center gap-3">
-        <GameViewLoader level={state.level} />
-        <button
-          type="button"
-          onClick={reset}
-          className="inline-flex min-h-[44px] touch-manipulation items-center gap-1.5 rounded-full border border-slate-600 bg-slate-900 px-5 py-2 font-medium text-slate-100 hover:bg-slate-800"
-        >
-          <PlusIcon /> New photo
-        </button>
+        <GameViewLoader level={state.level} onNewPhoto={newPhoto} />
         {state.notes.map((note) => (
           <p key={note} className="text-center text-sm text-slate-400">
             {note}
